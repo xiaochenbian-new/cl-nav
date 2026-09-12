@@ -351,17 +351,39 @@
         <div class="cfg-pane" data-pane="library" ${tab !== "library" ? "hidden" : ""}>
           <div class="cfg-toolbar">
             <strong>资源库管理</strong>
-            <button type="button" class="cfg-btn primary" id="libAdminUpload">＋ 上传资源</button>
-            <input id="libAdminFile" type="file" hidden />
           </div>
           <p class="settings-tip" style="margin:0 0 0.5rem">
-            访客在「资源库」页只能下载。上传 / 删除请在此操作（需登录）。文件存 Cloudflare R2，目录索引在 KV。
+            无需开通 R2 / 绑卡：把安装包装到 GitHub Releases、蓝奏云等，再在下方登记下载链接。目录存在 Cloudflare KV。
           </p>
-          <p class="settings-tip" style="margin:0 0 0.5rem">
-            若提示旧版本 / 无法下载：先在 Dashboard → R2 → Create bucket，名称必须是
-            <code>cl-nav-library</code>，再打开 Pages → cl-nav → Deployments → 对最新一次点 Retry deployment。
-            单文件建议 &lt; 95MB。仅 Cloudflare 站点可用（GitHub Pages 无 R2）。
-          </p>
+          <div class="cfg-webdav" style="box-shadow:none;border:0;padding:0;margin:0 0 0.35rem">
+          <div class="cfg-webdav-grid" style="margin-bottom:0.65rem">
+            <label>
+              <span>名称</span>
+              <input type="text" id="libLinkTitle" placeholder="例如 JDK 安装包" autocomplete="off" />
+            </label>
+            <label>
+              <span>下载地址</span>
+              <input type="url" id="libLinkUrl" placeholder="https://..." autocomplete="off" />
+            </label>
+            <label>
+              <span>分类</span>
+              <select id="libLinkCat">
+                <option value="software">软件</option>
+                <option value="installer">安装包</option>
+                <option value="docs">文档</option>
+                <option value="driver">驱动</option>
+                <option value="other" selected>其他</option>
+              </select>
+            </label>
+            <label>
+              <span>备注</span>
+              <input type="text" id="libLinkDesc" placeholder="可选" autocomplete="off" />
+            </label>
+          </div>
+          <div class="cfg-webdav-row" style="margin-bottom:0.55rem">
+            <button type="button" class="cfg-btn primary" id="libAdminAddLink">添加外链资源</button>
+          </div>
+          </div>
           <p class="cfg-status" id="libAdminStatus"></p>
           <div class="cfg-list" id="libAdminList"></div>
         </div>
@@ -486,7 +508,7 @@
       };
 
       if (!items.length) {
-        listEl.innerHTML = `<p class="settings-tip">暂无资源条目。可点「上传资源」或在 library-data.js 配置。</p>`;
+        listEl.innerHTML = `<p class="settings-tip">暂无资源。请用上方「添加外链资源」登记下载地址。</p>`;
         return;
       }
 
@@ -520,22 +542,24 @@
         this.logout();
       });
 
-      root.querySelector("#libAdminUpload")?.addEventListener("click", () => {
-        root.querySelector("#libAdminFile")?.click();
-      });
-
-      root.querySelector("#libAdminFile")?.addEventListener("change", async (e) => {
-        const file = e.target.files && e.target.files[0];
-        e.target.value = "";
-        if (!file || !window.LibraryStorage) return;
+      root.querySelector("#libAdminAddLink")?.addEventListener("click", async () => {
+        if (!window.LibraryStorage?.addLink) return;
         this.activeTab = "library";
-        setLibStatus("正在上传…");
+        const title = root.querySelector("#libLinkTitle")?.value || "";
+        const downloadUrl = root.querySelector("#libLinkUrl")?.value || "";
+        const category = root.querySelector("#libLinkCat")?.value || "other";
+        const desc = root.querySelector("#libLinkDesc")?.value || "";
+        setLibStatus("正在添加…");
         try {
-          await LibraryStorage.upload(file, { title: file.name });
-          setLibStatus("上传成功", "ok");
+          await LibraryStorage.addLink({ title, downloadUrl, category, desc });
+          setLibStatus("已添加", "ok");
+          const urlInput = root.querySelector("#libLinkUrl");
+          const titleInput = root.querySelector("#libLinkTitle");
+          if (urlInput) urlInput.value = "";
+          if (titleInput) titleInput.value = "";
           await this.renderLibraryAdmin(root);
         } catch (err) {
-          setLibStatus(err.message || "上传失败（存储后端待接入）", "err");
+          setLibStatus(err.message || "添加失败", "err");
         }
       });
 

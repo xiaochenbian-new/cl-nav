@@ -1,4 +1,4 @@
-# Cloudflare Pages — Functions + KV 同步 + R2 资源库
+# Cloudflare Pages — Functions + KV（资源库目录不依赖 R2 / 绑卡）
 name = "cl-nav"
 compatibility_date = "2024-11-01"
 pages_build_output_dir = "."
@@ -7,10 +7,10 @@ pages_build_output_dir = "."
 binding = "CL_NAV_SYNC"
 id = "fbfee28c0c54443fb8d4aabc9b68880b"
 
-# 先在 Dashboard → R2 → Create bucket，名称必须与 bucket_name 一致
-[[r2_buckets]]
-binding = "CL_NAV_R2"
-bucket_name = "cl-nav-library"
-
 [vars]
 LIBRARY_ADMIN_PASS = "xiaochenbian"
+
+# 以后若绑卡开通 R2，可取消下面注释并创建同名 bucket：
+# [[r2_buckets]]
+# binding = "CL_NAV_R2"
+# bucket_name = "cl-nav-library"

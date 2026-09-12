@@ -1,10 +1,10 @@
-/** CL Nav — 资源库：Cloudflare R2 + KV 目录索引 */
+/** CL Nav — 资源库：KV 目录 + 外链下载（无需 R2 / 绑卡） */
 (function () {
   window.LIBRARY_DATA = {
     brand: "CL Nav",
     title: "资源库",
     tagline: "软件 · 安装包 · 常用资源",
-    storageMode: "r2",
+    storageMode: "url",
     categories: [
       { id: "all", name: "全部" },
       { id: "software", name: "软件" },
@@ -18,10 +18,13 @@
 
   const API = "/api/library";
 
-  function authHeaders() {
-    if (!window.NavAuth?.isLoggedIn?.()) return {};
-    const pass = window.NavAuth.adminPass?.() || "xiaochenbian";
-    return { Authorization: "Bearer " + pass };
+  function authHeaders(json) {
+    const h = {};
+    if (window.NavAuth?.isLoggedIn?.()) {
+      h.Authorization = "Bearer " + (window.NavAuth.adminPass?.() || "xiaochenbian");
+    }
+    if (json) h["Content-Type"] = "application/json; charset=utf-8";
+    return h;
   }
 
   function isFileProtocol() {
@@ -51,64 +54,63 @@
     const ct = (res.headers.get("content-type") || "").toLowerCase();
     if (ct.includes("text/html")) {
       throw new Error(
-        "云端还是旧版本（/api/library 未生效）。请在 Cloudflare 创建 R2 桶「cl-nav-library」后，到 Pages → Deployments 里 Retry 最新部署。"
+        "云端还是旧版本（/api/library 未生效）。请到 Cloudflare Pages → Deployments 对最新提交 Retry deployment。"
       );
     }
-
     return res;
   }
 
   window.LibraryStorage = {
     mode() {
-      return "r2";
+      return LIBRARY_DATA.storageMode || "url";
     },
 
     async list() {
-      try {
-        const res = await api("GET");
-        if (res.status === 503) {
-          const j = await res.json().catch(() => ({}));
-          throw new Error(j.error || "R2/KV 未绑定");
-        }
-        if (!res.ok) {
-          const j = await res.json().catch(() => ({}));
-          throw new Error(j.error || "读取目录失败 HTTP " + res.status);
-        }
-        const data = await res.json();
-        const items = Array.isArray(data.items) ? data.items : [];
-        LIBRARY_DATA.items = items;
-        LIBRARY_DATA.storageMode = data.storageMode || "r2";
-        return items.slice();
-      } catch (err) {
-        // 离线兜底：空列表，避免整页挂死
-        if (!LIBRARY_DATA.items) LIBRARY_DATA.items = [];
-        throw err;
+      const res = await api("GET");
+      if (res.status === 503) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "KV 未绑定");
       }
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "读取目录失败 HTTP " + res.status);
+      }
+      const data = await res.json();
+      const items = Array.isArray(data.items) ? data.items : [];
+      LIBRARY_DATA.items = items;
+      LIBRARY_DATA.storageMode = data.storageMode || "url";
+      return items.slice();
     },
 
     async getDownloadUrl(item) {
-      if (item?.downloadUrl) return item.downloadUrl;
+      if (item?.downloadUrl && /^https?:\/\//i.test(item.downloadUrl)) return item.downloadUrl;
       if (item?.id) return API + "?id=" + encodeURIComponent(item.id) + "&download=1";
+      if (item?.downloadUrl) return item.downloadUrl;
       throw new Error("该资源没有下载地址");
     },
 
-    async upload(file, meta = {}) {
-      if (!file) throw new Error("未选择文件");
-      if (!window.NavAuth?.isLoggedIn?.()) throw new Error("请先登录后再上传");
-
-      const fd = new FormData();
-      fd.append("file", file, file.name);
-      fd.append("title", meta.title || file.name);
-      fd.append("desc", meta.desc || "");
-      fd.append("category", meta.category || "other");
-      fd.append("version", meta.version || "—");
-      fd.append("platform", meta.platform || "—");
-
-      const res = await api("POST", { body: fd, headers: authHeaders() });
+    /** 登记外链（推荐，无需绑卡） */
+    async addLink(meta = {}) {
+      if (!window.NavAuth?.isLoggedIn?.()) throw new Error("请先登录后再添加");
+      const downloadUrl = String(meta.downloadUrl || "").trim();
+      if (!/^https?:\/\//i.test(downloadUrl)) {
+        throw new Error("请填写以 http(s):// 开头的下载地址");
+      }
+      const res = await api("POST", {
+        body: JSON.stringify({
+          title: meta.title || "未命名资源",
+          desc: meta.desc || "",
+          category: meta.category || "other",
+          version: meta.version || "—",
+          size: meta.size || "—",
+          platform: meta.platform || "—",
+          downloadUrl,
+        }),
+        headers: authHeaders(true),
+      });
       const j = await res.json().catch(() => ({}));
       if (res.status === 401) throw new Error(j.error || "未授权，请重新登录");
-      if (res.status === 503) throw new Error(j.error || "R2 未绑定，请先创建 bucket cl-nav-library");
-      if (!res.ok) throw new Error(j.error || "上传失败 HTTP " + res.status);
+      if (!res.ok) throw new Error(j.error || "添加失败 HTTP " + res.status);
       if (j.item) {
         LIBRARY_DATA.items = LIBRARY_DATA.items || [];
         LIBRARY_DATA.items.unshift(j.item);
@@ -116,10 +118,16 @@
       return j.item;
     },
 
+    async upload(file, meta = {}) {
+      // 兼容旧按钮：无 R2 时引导用外链
+      if (meta && meta.downloadUrl) return this.addLink({ ...meta, title: meta.title || (file && file.name) });
+      throw new Error("未开通 R2（需绑卡）。请使用「添加外链」填写下载地址。");
+    },
+
     async remove(id) {
       if (!id) throw new Error("缺少 id");
       if (!window.NavAuth?.isLoggedIn?.()) throw new Error("请先登录后再删除");
-      const res = await api("DELETE", { id, headers: authHeaders() });
+      const res = await api("DELETE", { id, headers: authHeaders(false) });
       const j = await res.json().catch(() => ({}));
       if (res.status === 401) throw new Error(j.error || "未授权，请重新登录");
       if (!res.ok) throw new Error(j.error || "删除失败 HTTP " + res.status);
