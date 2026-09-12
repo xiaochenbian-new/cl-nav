@@ -640,5 +640,6 @@ window.NAV_DATA = {
   }
 };
 
+// Favicon URL：由 shared/favicon-cache.js 覆盖为同源 /api/favicon 或 CDN
 window.navFavicon = (domain) =>
   `https://icons.duckduckgo.com/ip3/${encodeURIComponent(domain)}.ico`;

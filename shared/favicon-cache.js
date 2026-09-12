@@ -1,4 +1,4 @@
-/** CL Nav — favicon local cache (memory + IndexedDB) + remote fallbacks */
+/** CL Nav — favicon local cache (memory + IndexedDB) + same-origin / CDN fallbacks */
 (function () {
   const DB_NAME = "cl-nav-favicon-db";
   const STORE = "icons";
@@ -6,13 +6,27 @@
   const memory = new Map(); // domain -> objectURL | remote url
   const pending = new Map();
 
+  function canUseLocalProxy() {
+    return typeof location !== "undefined" && /^https?:$/i.test(location.protocol);
+  }
+
+  function localProxyUrl(domain) {
+    if (!canUseLocalProxy()) return "";
+    return "/api/favicon?domain=" + encodeURIComponent(domain);
+  }
+
   function remoteUrls(domain) {
     const d = encodeURIComponent(domain);
-    return [
+    const list = [];
+    const local = localProxyUrl(domain);
+    // 同源代理优先：国内打不开 DDG/Google，由 Cloudflare 边缘代拉并可写入 IDB
+    if (local) list.push(local);
+    list.push(
       `https://icons.duckduckgo.com/ip3/${d}.ico`,
       `https://www.google.com/s2/favicons?domain=${d}&sz=64`,
-      `https://favicon.im/${d}?larger=true`,
-    ];
+      `https://favicon.im/${d}?larger=true`
+    );
+    return list;
   }
 
   function openDb() {
@@ -64,7 +78,7 @@
     return URL.createObjectURL(blob);
   }
 
-  /** Sync: memory hit or remote URL (for first paint). */
+  /** Sync: memory hit or best remote URL (for first paint). */
   function urlFor(domain) {
     if (!domain) return "";
     if (memory.has(domain)) return memory.get(domain);
@@ -88,7 +102,6 @@
       }
       const remote = remoteUrls(domain)[0];
       memory.set(domain, remote);
-      // Warm-fetch into IDB (may fail on CORS; SW still caches)
       downloadAndStore(domain).catch(() => {});
       return remote;
     })();
@@ -109,33 +122,35 @@
         if (!res.ok) continue;
         const blob = await res.blob();
         if (!blob || blob.size < 16) continue;
-        // skip obvious HTML error pages
-        if (blob.type && /html/i.test(blob.type)) continue;
+        if (blob.type && /html|json/i.test(blob.type)) continue;
         await idbPut(domain, blob, url);
         const obj = blobToUrl(blob);
         memory.set(domain, obj);
         return obj;
       } catch (_) {
-        /* try next / rely on SW */
+        /* try next */
       }
     }
     return null;
   }
 
-  /** After <img> shows a network icon, try to persist bytes into IDB. */
+  /** After <img> shows a network icon, persist bytes into IDB. */
   async function persistFromNetwork(domain, src) {
     if (!domain || !src || String(src).startsWith("blob:")) return;
     const existing = await idbGet(domain);
     if (existing?.blob?.size > 0) return;
 
-    // Prefer Cache API (filled by Service Worker) — works even when CORS blocks page fetch
+    // Same-origin /api/favicon or Cache API (readable, non-opaque)
     try {
       if (window.caches) {
         const cache = await caches.open("cl-nav-favicons-v1");
-        const hit = await cache.match(src);
-        if (hit) {
+        let hit = await cache.match(src);
+        if (!hit && src.startsWith("/")) {
+          hit = await cache.match(new URL(src, location.origin).href);
+        }
+        if (hit && hit.type !== "opaque") {
           const blob = await hit.blob();
-          if (blob && blob.size > 16 && !(blob.type && /html/i.test(blob.type))) {
+          if (blob && blob.size > 16 && !(blob.type && /html|json/i.test(blob.type))) {
             await idbPut(domain, blob, src);
             memory.set(domain, blobToUrl(blob));
             return;
@@ -144,15 +159,21 @@
       }
     } catch (_) {}
 
-    try {
-      const res = await fetch(src, { mode: "cors", credentials: "omit", referrerPolicy: "no-referrer" });
-      if (!res.ok) return;
-      const blob = await res.blob();
-      if (!blob || blob.size < 16) return;
-      if (blob.type && /html/i.test(blob.type)) return;
-      await idbPut(domain, blob, src);
-      memory.set(domain, blobToUrl(blob));
-    } catch (_) {}
+    // Prefer re-fetch via same-origin proxy (CORS OK)
+    const proxy = localProxyUrl(domain);
+    const candidates = proxy && src !== proxy ? [proxy, src] : [src];
+    for (const url of candidates) {
+      try {
+        const res = await fetch(url, { mode: "cors", credentials: "omit", referrerPolicy: "no-referrer" });
+        if (!res.ok) continue;
+        const blob = await res.blob();
+        if (!blob || blob.size < 16) continue;
+        if (blob.type && /html|json/i.test(blob.type)) continue;
+        await idbPut(domain, blob, url);
+        memory.set(domain, blobToUrl(blob));
+        return;
+      } catch (_) {}
+    }
   }
 
   /** Replace img src with cached blob when ready; wire load→persist. */
@@ -171,9 +192,18 @@
       }
 
       resolve(domain).then((url) => {
-        if (!url || img.getAttribute("src") === url) return;
+        if (!url) return;
         if (String(url).startsWith("blob:")) {
+          if (img.getAttribute("src") === url) return;
           img.dataset.fromCache = "1";
+          img.src = url;
+          return;
+        }
+        // 尚无 IDB：切到同源代理 URL，避免一直卡在国外 CDN
+        const cur = img.getAttribute("src") || "";
+        if (cur !== url && (cur.includes("duckduckgo.com") || cur.includes("google.com") || !cur)) {
+          img.dataset.fromCache = "0";
+          img.dataset.step = "0";
           img.src = url;
         }
       });
@@ -187,7 +217,13 @@
     const run = () => {
       const batch = list.slice(i, i + 4);
       i += 4;
-      batch.forEach((d) => resolve(d));
+      batch.forEach((d) => {
+        resolve(d).then((url) => {
+          if (url && !String(url).startsWith("blob:")) {
+            downloadAndStore(d).catch(() => {});
+          }
+        });
+      });
       if (i < list.length) {
         if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 1500 });
         else setTimeout(run, 80);
