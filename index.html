@@ -534,6 +534,27 @@
     .cfg-status.ok { color: #059669; }
     .cfg-status.err { color: #dc2626; }
     .cfg-status.warn { color: #d97706; }
+    .cfg-webdav-details {
+      margin: 0.35rem 0 0;
+      border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+      border-radius: 10px;
+      padding: 0.55rem 0.75rem 0.7rem;
+      background: color-mix(in srgb, var(--panel) 92%, transparent);
+    }
+    .cfg-webdav-details > summary {
+      cursor: pointer;
+      font-weight: 650;
+      font-size: 13px;
+      color: var(--muted);
+      user-select: none;
+    }
+    .cfg-webdav-details[open] > summary { margin-bottom: 0.35rem; color: var(--ink); }
+    .cfg-webdav code {
+      font-size: 12px;
+      padding: 0.05rem 0.3rem;
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--muted) 12%, transparent);
+    }
 
     .cfg-section-divider {
       height: 1px;
@@ -677,6 +698,7 @@
   <script src="shared/data.js"></script>
   <script src="shared/favicon-cache.js"></script>
   <script src="shared/store.js"></script>
+  <script src="shared/cf-sync.js"></script>
   <script src="shared/webdav.js"></script>
   <script src="shared/portal.js"></script>
   <script src="shared/config-ui.js"></script>
@@ -942,12 +964,17 @@
     refreshFromStore();
     Portal.bindSearch();
 
-    // WebDAV: pull when tab becomes visible again (like todo-app ON_RESUME)
+    // 云端 / WebDAV：切回前台时尝试拉取
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState !== "visible" || !window.NavWebDav) return;
-      const p = NavWebDav.loadPrefs();
-      if (!p.autoBackup || !NavWebDav.isReady(p)) return;
-      NavWebDav.sync("PULL").catch(() => {});
+      if (document.visibilityState !== "visible") return;
+      if (window.NavCfSync) {
+        const c = NavCfSync.loadPrefs();
+        if (c.autoSync && NavCfSync.isReady(c)) NavCfSync.sync("PULL").catch(() => {});
+      }
+      if (window.NavWebDav) {
+        const p = NavWebDav.loadPrefs();
+        if (p.autoBackup && NavWebDav.isReady(p)) NavWebDav.sync("PULL").catch(() => {});
+      }
     });
 
     const fromHash = location.hash.replace("#", "");

@@ -217,6 +217,11 @@
         autoBackup: false,
         remoteNewerSkipAt: 0,
       };
+      const cf = window.NavCfSync?.loadPrefs?.() || {
+        token: "",
+        autoSync: false,
+        remoteNewerSkipAt: 0,
+      };
 
       root.innerHTML = `
         <div class="cfg-tabs" id="cfgTabs">
@@ -331,7 +336,33 @@
         </div>
         <div class="cfg-pane" data-pane="data" ${tab !== "data" ? "hidden" : ""}>
           <div class="cfg-webdav">
-            <h4>WebDAV 多端同步</h4>
+            <h4>Cloudflare 云端同步（推荐）</h4>
+            <label class="cfg-field">
+              <span>同步口令（各设备相同，至少 8 位）</span>
+              <div class="cfg-webdav-row" style="margin:0">
+                <input type="text" id="cfToken" placeholder="点击「生成口令」或自行填写" value="${esc(cf.token)}" autocomplete="off" style="flex:1;min-width:12rem" />
+                <button type="button" class="cfg-btn" id="cfGenToken">生成口令</button>
+              </div>
+            </label>
+            <div class="cfg-webdav-row">
+              <label class="chk"><input type="checkbox" id="cfAuto" ${cf.autoSync ? "checked" : ""} /> 自动同步</label>
+              <button type="button" class="cfg-btn" id="cfSave">保存</button>
+              <button type="button" class="cfg-btn" id="cfTest">测试</button>
+              <button type="button" class="cfg-btn primary" id="cfSync">立即同步</button>
+              <button type="button" class="cfg-btn" id="cfUpload">上传到云端</button>
+              <button type="button" class="cfg-btn" id="cfDownload">从云端恢复</button>
+            </div>
+            <p class="cfg-status ${cf.remoteNewerSkipAt ? "warn" : ""}" id="cfStatus">${
+              cf.remoteNewerSkipAt
+                ? "云端有更新备份，建议「从云端恢复」或「立即同步」。"
+                : "数据保存在本站 Cloudflare KV；口令相同即可多端同步。须在 Pages 绑定 KV：CL_NAV_SYNC。"
+            }</p>
+            <p class="settings-tip">在 Cloudflare Dashboard → Workers &amp; Pages → cl-nav → Settings → Functions → KV namespace bindings，添加绑定，变量名填 <code>CL_NAV_SYNC</code>（先创建任意 KV 命名空间即可）。部署后在此设置相同口令。</p>
+          </div>
+          <div class="cfg-section-divider"></div>
+          <details class="cfg-webdav-details">
+            <summary>WebDAV（可选，坚果云在 Cloudflare 上通常不可用）</summary>
+            <div class="cfg-webdav" style="margin-top:0.6rem;box-shadow:none;border:0;padding:0">
             <div class="cfg-webdav-grid">
               <label>
                 <span>服务器地址</span>
@@ -352,9 +383,9 @@
             </div>
             <div class="cfg-webdav-row">
               <label class="chk"><input type="checkbox" id="wdAuto" ${wd.autoBackup ? "checked" : ""} /> 自动同步</label>
-              <label class="chk" title="经本站 /api/webdav 转发以绕过 CORS；坚果云在 Cloudflare 上通常仍不可达"><input type="checkbox" id="wdProxy" ${
+              <label class="chk" title="经本站 /api/webdav 转发"><input type="checkbox" id="wdProxy" ${
                 wd.useProxy ? "checked" : ""
-              } /> 同源代理（Cloudflare）</label>
+              } /> 同源代理</label>
               <button type="button" class="cfg-btn" id="wdSave">保存配置</button>
               <button type="button" class="cfg-btn" id="wdTest">测试连接</button>
               <button type="button" class="cfg-btn primary" id="wdSync">立即同步</button>
@@ -364,10 +395,10 @@
             <p class="cfg-status ${wd.remoteNewerSkipAt ? "warn" : ""}" id="wdStatus">${
               wd.remoteNewerSkipAt
                 ? "网盘有更新备份，建议「从网盘恢复」或「立即同步」。"
-                : "同步上传/下载的是当前本地 JSON；删除的分类与网站会随 JSON 一起生效。"
+                : "国外 WebDAV 可试；坚果云经 Cloudflare 易 520。"
             }</p>
-            <p class="settings-tip">浏览器无法直连坚果云（无 CORS）。Cloudflare 同源代理能转发请求，但其海外节点通常访问不了坚果云（易出现 HTTP 520），此时请用下方「本地 JSON」导入/导出。若使用国外 WebDAV，可勾选「同源代理」。</p>
-          </div>
+            </div>
+          </details>
           <div class="cfg-section-divider"></div>
           <div class="cfg-toolbar">
             <strong>本地 JSON</strong>
@@ -378,7 +409,7 @@
             <button type="button" class="cfg-btn danger" id="cfgReset">恢复默认</button>
           </div>
           <textarea id="cfgJson" class="cfg-json" spellcheck="false" placeholder="导入时粘贴 JSON，或导出后复制保存"></textarea>
-          <p class="settings-tip">配置保存在浏览器 localStorage；导出/WebDAV 同步的就是这份 JSON。只有点「恢复默认」才会重新载入内置站点。</p>
+          <p class="settings-tip">配置保存在浏览器 localStorage；云端/WebDAV/导出的都是这份 JSON。</p>
         </div>
         <div class="cfg-pane" data-pane="theme" ${tab !== "theme" ? "hidden" : ""}>
           <div class="settings-row">
@@ -582,6 +613,104 @@
         this.activeTab = "data";
         NavStore.reset();
         this.selectedCatId = "";
+      });
+
+      const setCfStatus = (text, kind = "") => {
+        const el = root.querySelector("#cfStatus");
+        if (!el) return;
+        el.textContent = text;
+        el.className = "cfg-status" + (kind ? " " + kind : "");
+      };
+
+      root.querySelector("#cfGenToken")?.addEventListener("click", () => {
+        if (!window.NavCfSync) return;
+        const input = root.querySelector("#cfToken");
+        if (!input) return;
+        if (input.value.trim() && !confirm("将覆盖当前口令；其它设备需改成新口令才能同步。继续？")) return;
+        input.value = NavCfSync.generateToken();
+        setCfStatus("已生成新口令，请点「保存」并抄到其它设备", "ok");
+      });
+
+      root.querySelector("#cfSave")?.addEventListener("click", () => {
+        if (!window.NavCfSync) return;
+        this.activeTab = "data";
+        const token = root.querySelector("#cfToken")?.value || "";
+        const autoSync = !!root.querySelector("#cfAuto")?.checked;
+        NavCfSync.savePrefs({ token, autoSync });
+        setCfStatus("同步配置已保存", "ok");
+        if (autoSync && NavCfSync.isReady()) {
+          NavCfSync.sync("FULL")
+            .then((r) => setCfStatus(r.message || "同步完成", "ok"))
+            .catch((e) => setCfStatus(e.message || "同步失败", "err"));
+        }
+      });
+
+      root.querySelector("#cfAuto")?.addEventListener("change", () => {
+        if (!window.NavCfSync) return;
+        NavCfSync.savePrefs({
+          token: root.querySelector("#cfToken")?.value || "",
+          autoSync: !!root.querySelector("#cfAuto").checked,
+        });
+      });
+
+      root.querySelector("#cfTest")?.addEventListener("click", async () => {
+        if (!window.NavCfSync) return;
+        this.activeTab = "data";
+        NavCfSync.savePrefs({
+          token: root.querySelector("#cfToken")?.value || "",
+          autoSync: !!root.querySelector("#cfAuto")?.checked,
+        });
+        setCfStatus("正在测试…");
+        const msg = await NavCfSync.testConnection(NavCfSync.loadPrefs());
+        setCfStatus(msg, /成功/.test(msg) ? "ok" : "err");
+      });
+
+      root.querySelector("#cfSync")?.addEventListener("click", async () => {
+        if (!window.NavCfSync) return;
+        this.activeTab = "data";
+        NavCfSync.savePrefs({
+          token: root.querySelector("#cfToken")?.value || "",
+          autoSync: !!root.querySelector("#cfAuto")?.checked,
+        });
+        setCfStatus("正在同步…");
+        try {
+          const r = await NavCfSync.sync("FULL");
+          setCfStatus(r.message || "同步完成", "ok");
+        } catch (e) {
+          setCfStatus(e.message || "同步失败", "err");
+        }
+      });
+
+      root.querySelector("#cfUpload")?.addEventListener("click", async () => {
+        if (!window.NavCfSync) return;
+        this.activeTab = "data";
+        NavCfSync.savePrefs({
+          token: root.querySelector("#cfToken")?.value || "",
+          autoSync: !!root.querySelector("#cfAuto")?.checked,
+        });
+        setCfStatus("正在上传…");
+        try {
+          const r = await NavCfSync.backupNow();
+          setCfStatus(r.message || "上传完成", "ok");
+        } catch (e) {
+          setCfStatus(e.message || "上传失败", "err");
+        }
+      });
+
+      root.querySelector("#cfDownload")?.addEventListener("click", async () => {
+        if (!window.NavCfSync) return;
+        this.activeTab = "data";
+        NavCfSync.savePrefs({
+          token: root.querySelector("#cfToken")?.value || "",
+          autoSync: !!root.querySelector("#cfAuto")?.checked,
+        });
+        setCfStatus("正在恢复…");
+        try {
+          const r = await NavCfSync.restoreNow();
+          setCfStatus(r.message || "恢复完成", "ok");
+        } catch (e) {
+          setCfStatus(e.message || "恢复失败", "err");
+        }
       });
 
       const setWdStatus = (text, kind = "") => {

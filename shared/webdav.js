@@ -105,6 +105,10 @@
     if (!cfg.password.trim()) throw new Error("请填写密码（坚果云请用「应用密码」）");
   }
 
+  function isFileProtocol() {
+    return typeof location !== "undefined" && location.protocol === "file:";
+  }
+
   async function davFetch(method, url, cfg, { depth, body, contentType } = {}) {
     const headers = {
       Authorization: authHeader(cfg.username, cfg.password),
@@ -114,7 +118,9 @@
 
     const prefs = loadPrefs();
     let fetchUrl = url;
-    if (prefs.useProxy && prefs.proxyPath) {
+    // file:// 下没有 /api/webdav，强制直连（仍会受 CORS 限制）
+    const useProxy = prefs.useProxy && prefs.proxyPath && !isFileProtocol();
+    if (useProxy) {
       const base = String(prefs.proxyPath).trim() || "/api/webdav";
       fetchUrl = base + (base.includes("?") ? "&" : "?") + "url=" + encodeURIComponent(url);
     }
@@ -126,6 +132,13 @@
     try {
       return await fetch(fetchUrl, init);
     } catch (err) {
+      if (prefs.useProxy && isFileProtocol()) {
+        const e = new Error(
+          "本地用 file:// 打开时没有 /api/webdav。请取消「同源代理」，或用本地静态服务器 / Cloudflare 站点访问；浏览器直连坚果云仍会因 CORS 失败，本地请用「本地 JSON」。"
+        );
+        e.cause = err;
+        throw e;
+      }
       if (prefs.useProxy) {
         const e = new Error(
           "无法连接代理 " +
@@ -291,6 +304,13 @@
       validate(c);
     } catch (e) {
       return "配置不完整：" + e.message;
+    }
+
+    if (isFileProtocol()) {
+      return (
+        "本地 file:// 无法使用 WebDAV：没有代理服务，且浏览器禁止跨域访问坚果云。" +
+        "请用下方「本地 JSON」备份；多端同步需在可访问坚果云的服务器上自建代理后再测。"
+      );
     }
 
     const base = c.baseUrl.replace(/\/+$/, "");

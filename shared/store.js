@@ -223,6 +223,11 @@
 
   function persist() {
     localStorage.setItem(KEY, JSON.stringify(state));
+    if (!syncing && window.NavCfSync?.markDirty) {
+      try {
+        NavCfSync.markDirty();
+      } catch (_) {}
+    }
     if (!syncing && window.NavWebDav?.markDirty) {
       try {
         NavWebDav.markDirty();
@@ -322,6 +327,7 @@
       const next =
         mode === "merge" ? mergeConfigs(state, remote) : normalizeConfig(remote);
       applyState(next, { fromSync: markClean });
+      if (markClean && window.NavCfSync?.clearDirty) NavCfSync.clearDirty();
       if (markClean && window.NavWebDav?.clearDirty) NavWebDav.clearDirty();
       return clone(state);
     },
