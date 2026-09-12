@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CL Nav �?开发者工具导�?/title>
+  <title>CL Nav — 开发者工具导航</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -11,9 +11,9 @@
   <style>
     /*
       布局目标（图2）：
-      - 头部 / 搜索 / 热词 始终在顶�?
+      - 头部 / 搜索 / 热词 始终在顶部
       - 分类卡片左缘与搜索框左缘对齐
-      - 侧栏在主内容左侧、位于分类区域旁，滚动时悬停在视口中�?
+      - 侧栏在主内容左侧、位于分类区域旁，滚动时悬停在视口中部
     */
     .page {
       --side-gap: 0.85rem;
@@ -732,20 +732,20 @@
           <div>
             <div class="brand">CL <span>Nav</span></div>
           </div>
-          <span class="tagline" id="tagline">开发者工具导�?/span>
+          <span class="tagline" id="tagline">开发者工具导航</span>
         </div>
-        <nav class="top-nav" id="topNav" aria-label="主导�?></nav>
+        <nav class="top-nav" id="topNav" aria-label="主导航"></nav>
       </header>
 
       <div class="search-row">
         <form class="search-box" id="searchForm" role="search">
           <div id="enginePickerHost"></div>
-          <input id="q" type="search" placeholder="搜索工具、文档、AI�? autocomplete="off" />
+          <input id="q" type="search" placeholder="搜索工具、文档、AI…" autocomplete="off" />
           <button type="submit">搜索</button>
         </form>
         <div class="search-actions" aria-label="主题">
           <button type="button" data-theme-btn="light" title="浅色">☀</button>
-          <button type="button" data-theme-btn="dark" title="深色">�?/button>
+          <button type="button" data-theme-btn="dark" title="深色">☾</button>
         </div>
       </div>
       <div class="hot-tags" id="hotTags"></div>
@@ -753,7 +753,7 @@
 
     <aside class="side-wrap">
       <nav class="side-menu" id="sideMenu" aria-label="分类路由"></nav>
-      <button type="button" class="side-top" id="backTop" title="返回顶部">�?顶部</button>
+      <button type="button" class="side-top" id="backTop" title="返回顶部">↑ 顶部</button>
     </aside>
 
     <div class="shell-main">
@@ -797,7 +797,7 @@
 
     function refreshFromStore() {
       cfg = NavStore.get();
-      // 空分类（损坏/误清空的本地配置）时回退默认，避免整页空�?
+      // 空分类（损坏/误清空的本地配置）时回退默认，避免整页空白
       if (!cfg.categories || !cfg.categories.length) {
         NavStore.reset();
         cfg = NavStore.get();
@@ -878,7 +878,7 @@
       window.scrollTo({ top, behavior: "smooth" });
     }
 
-    /** Click-nav locks spy until user scrolls again (avoids last section like 资源 �?学习). */
+    /** Click-nav locks spy until user scrolls again (avoids last section like 资源 → 学习). */
     let routeLockUntil = 0;
 
     function lockSpyForRoute() {
@@ -936,7 +936,7 @@
         return;
       }
 
-      // Last section (资源) often cannot reach top threshold �?activate when near page bottom
+      // Last section (资源) often cannot reach top threshold — activate when near page bottom
       const pageH = document.documentElement.scrollHeight;
       const viewBottom = window.scrollY + window.innerHeight;
       if (menuIds.length && pageH - viewBottom < 100) {
