@@ -177,7 +177,7 @@
 
   function canonicalPayload(cfg) {
     const n = normalizeConfig(cfg);
-    return {
+    const out = {
       brand: n.brand,
       tagline: n.tagline,
       engines: n.engines,
@@ -194,6 +194,25 @@
         }))
         .sort((a, b) => String(a.id).localeCompare(String(b.id))),
     };
+    if (cfg && cfg.library && typeof cfg.library === "object") {
+      const cats = Array.isArray(cfg.library.categories) ? cfg.library.categories : [];
+      const items = Array.isArray(cfg.library.items) ? cfg.library.items : [];
+      out.library = {
+        categories: cats
+          .map((c) => ({ id: String(c.id || ""), name: String(c.name || "") }))
+          .sort((a, b) => a.id.localeCompare(b.id)),
+        items: items
+          .map((it) => ({
+            id: String(it.id || ""),
+            title: String(it.title || ""),
+            category: String(it.category || ""),
+            downloadUrl: String(it.downloadUrl || ""),
+            updatedAt: String(it.updatedAt || ""),
+          }))
+          .sort((a, b) => a.id.localeCompare(b.id)),
+      };
+    }
+    return out;
   }
 
   function load() {

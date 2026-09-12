@@ -13,6 +13,13 @@
 const CATALOG_KEY = "library:catalog";
 const DEFAULT_ADMIN = "xiaochenbian";
 const LINK_CHANNELS = new Set(["github", "lanzou", "baidu", "quark", "aliyun", "direct", "other"]);
+const DEFAULT_LIB_CATEGORIES = [
+  { id: "software", name: "软件" },
+  { id: "installer", name: "安装包" },
+  { id: "docs", name: "文档" },
+  { id: "driver", name: "驱动" },
+  { id: "other", name: "其他" },
+];
 
 function cors(req) {
   const origin = req.headers.get("Origin") || "*";
@@ -113,28 +120,73 @@ function withNormalized(it) {
   return { ...it, links, downloadUrl };
 }
 
-async function readCatalog(kv) {
-  if (!kv) return [];
+function normalizeCategories(list) {
+  const seen = new Set();
+  const out = [];
+  const src = Array.isArray(list) && list.length ? list : DEFAULT_LIB_CATEGORIES;
+  for (const c of src) {
+    if (!c) continue;
+    let id = String(c.id || "")
+      .trim()
+      .replace(/\s+/g, "-")
+      .slice(0, 40);
+    if (!id || id === "all") continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const name = String(c.name || id).trim().slice(0, 40) || id;
+    out.push({ id, name });
+  }
+  if (!out.length) return DEFAULT_LIB_CATEGORIES.map((x) => ({ ...x }));
+  if (!out.some((c) => c.id === "other")) out.push({ id: "other", name: "其他" });
+  return out;
+}
+
+async function readCatalogDoc(kv) {
+  if (!kv) return { items: [], categories: normalizeCategories(null), storageMode: "url" };
   const raw = await kv.get(CATALOG_KEY);
-  if (!raw) return [];
+  if (!raw) return { items: [], categories: normalizeCategories(null), storageMode: "url" };
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : Array.isArray(parsed.items) ? parsed.items : [];
+    const items = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed.items)
+        ? parsed.items
+        : [];
+    return {
+      items,
+      categories: normalizeCategories(parsed && parsed.categories),
+      storageMode: (parsed && parsed.storageMode) || "url",
+    };
   } catch {
-    return [];
+    return { items: [], categories: normalizeCategories(null), storageMode: "url" };
   }
 }
 
-async function writeCatalog(kv, items) {
+async function writeCatalogDoc(kv, patch = {}) {
+  const prev = await readCatalogDoc(kv);
+  const items = patch.items !== undefined ? patch.items : prev.items;
+  const categories =
+    patch.categories !== undefined ? normalizeCategories(patch.categories) : prev.categories;
+  const storageMode = patch.storageMode || prev.storageMode || "url";
   await kv.put(
     CATALOG_KEY,
     JSON.stringify({
       version: 1,
       updatedAt: Date.now(),
-      storageMode: "url",
+      storageMode,
+      categories,
       items,
     })
   );
+  return { items, categories, storageMode };
+}
+
+async function readCatalog(kv) {
+  return (await readCatalogDoc(kv)).items;
+}
+
+async function writeCatalog(kv, items) {
+  await writeCatalogDoc(kv, { items });
 }
 
 export async function onRequest(context) {
@@ -184,12 +236,13 @@ export async function onRequest(context) {
     }
 
     if (request.method === "GET") {
-      const items = await readCatalog(kv);
+      const doc = await readCatalogDoc(kv);
       return json(
         {
           ok: true,
-          storageMode: r2 ? "r2+url" : "url",
-          items: items.map(withNormalized),
+          storageMode: r2 ? "r2+url" : doc.storageMode || "url",
+          categories: doc.categories,
+          items: doc.items.map(withNormalized),
         },
         200,
         request
@@ -247,6 +300,36 @@ export async function onRequest(context) {
           }
           await writeCatalog(kv, keep);
           return json({ ok: true, deleted: ids.length }, 200, request);
+        }
+
+        if (action === "categoriesSave") {
+          const categories = normalizeCategories(body.categories);
+          const doc = await readCatalogDoc(kv);
+          const valid = new Set(categories.map((c) => c.id));
+          const items = (doc.items || []).map((it) => {
+            if (!it) return it;
+            if (it.category && !valid.has(it.category)) {
+              return { ...it, category: "other", updatedAt: new Date().toISOString().slice(0, 10) };
+            }
+            return it;
+          });
+          const saved = await writeCatalogDoc(kv, { categories, items });
+          return json({ ok: true, categories: saved.categories }, 200, request);
+        }
+
+        if (action === "replaceCatalog") {
+          const categories = normalizeCategories(body.categories);
+          const items = Array.isArray(body.items) ? body.items : [];
+          const doc = await writeCatalogDoc(kv, { categories, items });
+          return json(
+            {
+              ok: true,
+              categories: doc.categories,
+              items: doc.items.map(withNormalized),
+            },
+            200,
+            request
+          );
         }
 
         if (action === "update" || (itemId && action !== "create")) {

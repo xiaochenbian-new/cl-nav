@@ -20,7 +20,8 @@
   }
 
   function catName(id) {
-    const c = (LIBRARY_DATA.categories || []).find((x) => x.id === id);
+    const list = window.LibraryStorage?.uiCategories?.() || LIBRARY_DATA.categories || [];
+    const c = list.find((x) => x.id === id);
     return c ? c.name : id || "未分类";
   }
 
@@ -82,7 +83,7 @@
       const side = document.getElementById("libSide");
       if (!side) return;
       const cur = this.filter.category;
-      side.innerHTML = (LIBRARY_DATA.categories || [])
+      side.innerHTML = (window.LibraryStorage?.uiCategories?.() || LIBRARY_DATA.categories || [])
         .map((c) => {
           const count =
             c.id === "all"

@@ -156,12 +156,31 @@
     }, 400);
   }
 
+  async function exportFullBackup() {
+    let json = NavStore.exportBackup({ ensureDefaults: false });
+    if (window.LibraryStorage?.enrichBackupJson) {
+      try {
+        json = await LibraryStorage.enrichBackupJson(json);
+      } catch (_) {}
+    }
+    return json;
+  }
+
+  async function applyFullBackup(remote, opts) {
+    NavStore.applyBackup(remote, opts);
+    if (window.LibraryStorage?.applyBackupLibrary) {
+      try {
+        await LibraryStorage.applyBackupLibrary(remote);
+      } catch (_) {}
+    }
+  }
+
   async function sync(mode = "FULL") {
     const prefs = loadPrefs();
     if (!isReady(prefs)) return { message: "请先设置同步口令" };
     validate(prefs);
 
-    const localJson = NavStore.exportBackup({ ensureDefaults: false });
+    const localJson = await exportFullBackup();
     const remote = await downloadOrNull(prefs);
     const last = prefs.lastUploadExportedAt;
     const dirty = prefs.localDirty;
@@ -184,8 +203,8 @@
     const remoteAt = NavStore.exportedAtOf(remote);
     const remoteNewer = last <= 0 || remoteAt > last;
 
-    const doPull = () => {
-      NavStore.applyBackup(remote, { markClean: true, mode: "replace" });
+    const doPull = async () => {
+      await applyFullBackup(remote, { markClean: true, mode: "replace" });
       savePrefs({
         lastUploadExportedAt: remoteAt || Date.now(),
         localDirty: false,
@@ -195,7 +214,7 @@
     };
 
     const doPush = async () => {
-      const json = NavStore.exportBackup({ ensureDefaults: false });
+      const json = await exportFullBackup();
       const r = await upload(prefs, json);
       return { message: r.message, pushed: true };
     };
@@ -225,7 +244,7 @@
   async function backupNow() {
     const prefs = loadPrefs();
     validate(prefs);
-    const json = NavStore.exportBackup({ ensureDefaults: false });
+    const json = await exportFullBackup();
     return upload(prefs, json);
   }
 
@@ -234,10 +253,10 @@
     validate(prefs);
     const remote = await downloadOrNull(prefs);
     if (remote == null) throw new Error("云端尚无备份");
-    if (!confirm("将用云端 JSON 整份覆盖本机配置（本机多出来的分类/网站会丢失）。继续？")) {
+    if (!confirm("将用云端 JSON 整份覆盖本机配置（含资源库分类与目录）。继续？")) {
       return { message: "已取消" };
     }
-    NavStore.applyBackup(remote, { markClean: true, mode: "replace" });
+    await applyFullBackup(remote, { markClean: true, mode: "replace" });
     const remoteAt = NavStore.exportedAtOf(remote);
     savePrefs({
       lastUploadExportedAt: remoteAt || Date.now(),

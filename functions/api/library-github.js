@@ -112,15 +112,24 @@ async function readCatalog(kv) {
 }
 
 async function writeCatalog(kv, items) {
-  await kv.put(
-    CATALOG_KEY,
-    JSON.stringify({
-      version: 1,
-      updatedAt: Date.now(),
-      storageMode: "github-release",
-      items,
-    })
-  );
+  let categories;
+  let storageMode = "github-release";
+  try {
+    const raw = await kv.get(CATALOG_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.categories)) categories = parsed.categories;
+      if (parsed && parsed.storageMode) storageMode = parsed.storageMode;
+    }
+  } catch (_) {}
+  const payload = {
+    version: 1,
+    updatedAt: Date.now(),
+    storageMode,
+    items,
+  };
+  if (categories) payload.categories = categories;
+  await kv.put(CATALOG_KEY, JSON.stringify(payload));
 }
 
 async function ghFetch(path, token, init = {}) {

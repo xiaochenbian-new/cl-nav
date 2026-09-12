@@ -1,18 +1,19 @@
 /** CL Nav — 资源库：KV 目录 + 外链下载（无需 R2 / 绑卡） */
 (function () {
+  const DEFAULT_CATEGORIES = [
+    { id: "software", name: "软件" },
+    { id: "installer", name: "安装包" },
+    { id: "docs", name: "文档" },
+    { id: "driver", name: "驱动" },
+    { id: "other", name: "其他" },
+  ];
+
   window.LIBRARY_DATA = {
     brand: "CL Nav",
     title: "资源库",
     tagline: "软件 · 安装包 · 常用资源",
     storageMode: "url",
-    categories: [
-      { id: "all", name: "全部" },
-      { id: "software", name: "软件" },
-      { id: "installer", name: "安装包" },
-      { id: "docs", name: "文档" },
-      { id: "driver", name: "驱动" },
-      { id: "other", name: "其他" },
-    ],
+    categories: DEFAULT_CATEGORIES.map((c) => ({ ...c })),
     items: [],
   };
 
@@ -20,6 +21,65 @@
   const API_GH = "/api/library-github";
   const GH_PREFS_KEY = "cl-nav-github-release-v1";
   const GH_DEFAULTS = { owner: "xiaochenbian-new", repo: "cl-nav-file" };
+
+  function normalizeCategories(list) {
+    const seen = new Set();
+    const out = [];
+    const src = Array.isArray(list) && list.length ? list : DEFAULT_CATEGORIES;
+    for (const c of src) {
+      if (!c) continue;
+      let id = String(c.id || "")
+        .trim()
+        .replace(/\s+/g, "-")
+        .slice(0, 40);
+      if (!id || id === "all") continue;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push({ id, name: String(c.name || id).trim().slice(0, 40) || id });
+    }
+    if (!out.length) return DEFAULT_CATEGORIES.map((c) => ({ ...c }));
+    if (!out.some((c) => c.id === "other")) out.push({ id: "other", name: "其他" });
+    return out;
+  }
+
+  function uiCategories() {
+    return [{ id: "all", name: "全部" }, ...normalizeCategories(LIBRARY_DATA.categories)];
+  }
+
+  function categoryOptionsHtml(selected, { includeAll = false } = {}) {
+    const list = includeAll ? uiCategories() : normalizeCategories(LIBRARY_DATA.categories);
+    return list
+      .map((c) => {
+        const sel = c.id === selected ? " selected" : "";
+        return `<option value="${String(c.id).replace(/"/g, "&quot;")}"${sel}>${String(c.name)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")}</option>`;
+      })
+      .join("");
+  }
+
+  function markSyncDirty() {
+    try {
+      window.NavWebDav?.markDirty?.();
+    } catch (_) {}
+    try {
+      window.NavCfSync?.markDirty?.();
+    } catch (_) {}
+  }
+
+  function newCatId(name) {
+    const base = String(name || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^\w\u4e00-\u9fff-]/g, "")
+      .slice(0, 24);
+    let id = base || "cat";
+    if (id === "all") id = "cat";
+    const existing = new Set(normalizeCategories(LIBRARY_DATA.categories).map((c) => c.id));
+    if (!existing.has(id)) return id;
+    return id + "_" + Math.random().toString(36).slice(2, 6);
+  }
 
   function normalizeGhPart(s, kind) {
     let v = String(s || "")
@@ -156,8 +216,84 @@
       const data = await res.json();
       const items = Array.isArray(data.items) ? data.items : [];
       LIBRARY_DATA.items = items;
+      LIBRARY_DATA.categories = normalizeCategories(data.categories);
       LIBRARY_DATA.storageMode = data.storageMode || "url";
       return items.slice();
+    },
+
+    defaultCategories: DEFAULT_CATEGORIES,
+    normalizeCategories,
+    uiCategories,
+    categoryOptionsHtml,
+    newCatId,
+
+    async saveCategories(categories) {
+      if (!window.NavAuth?.isLoggedIn?.()) throw new Error("请先登录后再管理分类");
+      const next = normalizeCategories(categories);
+      const res = await api("POST", {
+        body: JSON.stringify({ action: "categoriesSave", categories: next }),
+        headers: authHeaders(true),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.status === 401) throw new Error(j.error || "未授权，请重新登录");
+      if (!res.ok) throw new Error(j.error || "保存分类失败 HTTP " + res.status);
+      LIBRARY_DATA.categories = normalizeCategories(j.categories || next);
+      markSyncDirty();
+      return LIBRARY_DATA.categories.slice();
+    },
+
+    async exportCatalog() {
+      try {
+        await this.list();
+      } catch (_) {}
+      return {
+        version: 1,
+        categories: normalizeCategories(LIBRARY_DATA.categories),
+        items: Array.isArray(LIBRARY_DATA.items) ? LIBRARY_DATA.items.slice() : [],
+        storageMode: LIBRARY_DATA.storageMode || "url",
+      };
+    },
+
+    async importCatalog(catalog) {
+      if (!catalog || typeof catalog !== "object") return false;
+      const categories = normalizeCategories(catalog.categories);
+      const items = Array.isArray(catalog.items) ? catalog.items : [];
+      const headers = authHeaders(true);
+      if (!headers.Authorization) {
+        headers.Authorization = "Bearer " + (window.NavAuth?.adminPass?.() || "xiaochenbian");
+      }
+      const res = await api("POST", {
+        body: JSON.stringify({ action: "replaceCatalog", categories, items }),
+        headers,
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.status === 401) throw new Error(j.error || "未授权，请重新登录");
+      if (!res.ok) throw new Error(j.error || "导入资源库失败 HTTP " + res.status);
+      LIBRARY_DATA.categories = normalizeCategories(j.categories || categories);
+      LIBRARY_DATA.items = Array.isArray(j.items) ? j.items : items;
+      return true;
+    },
+
+    /** 把资源库目录并入导航备份 JSON（WebDAV / CF 同步用） */
+    async enrichBackupJson(jsonText) {
+      const obj = typeof jsonText === "string" ? JSON.parse(jsonText) : { ...(jsonText || {}) };
+      obj.library = await this.exportCatalog();
+      obj.exportedAt = Date.now();
+      return JSON.stringify(obj, null, 2);
+    },
+
+    async applyBackupLibrary(remoteTextOrObj) {
+      let obj = remoteTextOrObj;
+      if (typeof obj === "string") {
+        try {
+          obj = JSON.parse(obj);
+        } catch {
+          return false;
+        }
+      }
+      if (!obj || !obj.library) return false;
+      await this.importCatalog(obj.library);
+      return true;
     },
 
     async getDownloadUrl(item, link) {
@@ -216,6 +352,7 @@
         LIBRARY_DATA.items = LIBRARY_DATA.items || [];
         LIBRARY_DATA.items.unshift(j.item);
       }
+      markSyncDirty();
       return j.item;
     },
 
@@ -244,6 +381,7 @@
       if (j.item) {
         LIBRARY_DATA.items = (LIBRARY_DATA.items || []).map((x) => (x.id === id ? j.item : x));
       }
+      markSyncDirty();
       return j.item;
     },
 
@@ -348,6 +486,7 @@
         LIBRARY_DATA.items = LIBRARY_DATA.items || [];
         LIBRARY_DATA.items.unshift(j.item);
       }
+      markSyncDirty();
       return j.item;
     },
 
@@ -363,6 +502,7 @@
       if (res.status === 401) throw new Error(j.error || "未授权，请重新登录");
       if (!res.ok) throw new Error(j.error || "删除失败 HTTP " + res.status);
       LIBRARY_DATA.items = (LIBRARY_DATA.items || []).filter((x) => x.id !== id);
+      markSyncDirty();
       return true;
     },
 
@@ -379,6 +519,7 @@
       if (!res.ok) throw new Error(j.error || "批量删除失败 HTTP " + res.status);
       const gone = new Set(list);
       LIBRARY_DATA.items = (LIBRARY_DATA.items || []).filter((x) => !gone.has(x.id));
+      markSyncDirty();
       return j.deleted || list.length;
     },
   };

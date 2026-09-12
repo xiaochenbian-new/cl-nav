@@ -846,3 +846,50 @@
   }
 }
 
+
+.cfg-lib-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.45rem;
+}
+
+.cfg-lib-cat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  padding: 0.1rem 0.15rem 0.1rem 0.15rem;
+}
+
+.cfg-lib-cat-chip > button[data-cat-rename] {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0.25rem 0.45rem;
+  cursor: pointer;
+  border-radius: 999px;
+}
+
+.cfg-lib-cat-chip > button[data-cat-rename]:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.cfg-lib-cat-chip > .cfg-lib-x {
+  border: 0;
+  background: transparent;
+  min-width: 1.4rem;
+  padding: 0.15rem;
+  border-radius: 999px;
+}
+
+.cfg-lib-cat-chip > .cfg-lib-x:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}

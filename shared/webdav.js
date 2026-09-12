@@ -393,6 +393,25 @@
     }, 2000);
   }
 
+  async function exportFullBackup() {
+    let json = NavStore.exportBackup({ ensureDefaults: false });
+    if (window.LibraryStorage?.enrichBackupJson) {
+      try {
+        json = await LibraryStorage.enrichBackupJson(json);
+      } catch (_) {}
+    }
+    return json;
+  }
+
+  async function applyFullBackup(remote, opts) {
+    NavStore.applyBackup(remote, opts);
+    if (window.LibraryStorage?.applyBackupLibrary) {
+      try {
+        await LibraryStorage.applyBackupLibrary(remote);
+      } catch (_) {}
+    }
+  }
+
   /**
    * Pull: merge remote into local (union) so neither side loses sites.
    * Push: upload local (after ensuring defaults are present).
@@ -408,7 +427,7 @@
       remotePath: prefs.remotePath,
     };
 
-    const localJson = NavStore.exportBackup({ ensureDefaults: false });
+    const localJson = await exportFullBackup();
     const remote = await downloadOrNull(cfg);
     const last = prefs.lastUploadExportedAt;
     const dirty = prefs.localDirty;
@@ -431,9 +450,8 @@
     const remoteAt = NavStore.exportedAtOf(remote);
     const remoteNewer = last <= 0 || remoteAt > last;
 
-    const doPull = () => {
-      // 整份替换为网盘 JSON（删除会同步生效）
-      NavStore.applyBackup(remote, { markClean: true, mode: "replace" });
+    const doPull = async () => {
+      await applyFullBackup(remote, { markClean: true, mode: "replace" });
       savePrefs({
         lastUploadExportedAt: remoteAt || Date.now(),
         localDirty: false,
@@ -443,7 +461,7 @@
     };
 
     const doPush = async () => {
-      const json = NavStore.exportBackup({ ensureDefaults: false });
+      const json = await exportFullBackup();
       const r = await uploadSafe(cfg, json, { forceOverwrite: true });
       return { message: r.message, pushed: true };
     };
@@ -480,7 +498,7 @@
       password: prefs.password,
       remotePath: prefs.remotePath,
     };
-    const json = NavStore.exportBackup({ ensureDefaults: false });
+    const json = await exportFullBackup();
     try {
       return await uploadSafe(cfg, json, { forceOverwrite: force });
     } catch (e) {
@@ -504,10 +522,10 @@
       remotePath: prefs.remotePath,
     };
     const remote = await downloadJson(cfg);
-    if (!confirm("将用网盘 JSON 整份覆盖本机配置（本机多出来的分类/网站会丢失）。继续？")) {
+    if (!confirm("将用网盘 JSON 整份覆盖本机配置（含资源库分类与目录）。继续？")) {
       return { message: "已取消" };
     }
-    NavStore.applyBackup(remote, { markClean: true, mode: "replace" });
+    await applyFullBackup(remote, { markClean: true, mode: "replace" });
     const remoteAt = NavStore.exportedAtOf(remote);
     savePrefs({
       lastUploadExportedAt: remoteAt || Date.now(),

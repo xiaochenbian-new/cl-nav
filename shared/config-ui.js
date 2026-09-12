@@ -390,19 +390,24 @@
               </section>
               <section class="cfg-lib-section">
                 <header class="cfg-lib-section-h">
+                  <strong>资源分类</strong>
+                  <span>默认可改；随 WebDAV / 云端备份同步</span>
+                </header>
+                <div class="cfg-lib-cats" id="libCatChips"></div>
+                <div class="cfg-lib-actions">
+                  <input type="text" id="libCatNewName" placeholder="新分类名称" autocomplete="off" style="flex:1;min-width:8rem" />
+                  <button type="button" class="cfg-btn" id="libCatAdd">添加分类</button>
+                </div>
+              </section>
+              <section class="cfg-lib-section">
+                <header class="cfg-lib-section-h">
                   <strong>快速登记外链</strong>
                   <span>不上传文件，只登记下载地址</span>
                 </header>
                 <div class="cfg-lib-form">
                   <label><span>名称</span><input type="text" id="libLinkTitle" placeholder="例如 JDK 安装包" autocomplete="off" /></label>
                   <label><span>分类</span>
-                    <select id="libLinkCat">
-                      <option value="software">软件</option>
-                      <option value="installer">安装包</option>
-                      <option value="docs">文档</option>
-                      <option value="driver">驱动</option>
-                      <option value="other" selected>其他</option>
-                    </select>
+                    <select id="libLinkCat"></select>
                   </label>
                   <label class="cfg-lib-span2"><span>说明</span><input type="text" id="libLinkDesc" placeholder="可选" autocomplete="off" /></label>
                   <label><span>渠道</span>
@@ -553,8 +558,10 @@
         return;
       }
 
+      this.renderLibCategoryUi(root);
+
       const catName = (id) => {
-        const c = (window.LIBRARY_DATA?.categories || []).find((x) => x.id === id);
+        const c = (LibraryStorage.uiCategories?.() || []).find((x) => x.id === id);
         return c ? c.name : id || "未分类";
       };
       const channels = LibraryStorage.channels || [];
@@ -572,6 +579,8 @@
         listEl.innerHTML = `<p class="settings-tip cfg-lib-empty">还没有资源。可先展开「配置管理」测试连接，再点「上传到 Release」。</p>`;
         return;
       }
+
+      const editableCats = LibraryStorage.normalizeCategories?.(LIBRARY_DATA.categories) || [];
 
       listEl.innerHTML = items
         .map((it) => {
@@ -602,8 +611,7 @@
             )
             .join("");
 
-          const catOpts = (window.LIBRARY_DATA?.categories || [])
-            .filter((c) => c.id !== "all")
+          const catOpts = editableCats
             .map(
               (c) =>
                 `<option value="${esc(c.id)}" ${c.id === it.category ? "selected" : ""}>${esc(c.name)}</option>`
@@ -652,6 +660,36 @@
         .join("");
 
       this.syncLibBatchUi(root);
+    },
+
+    renderLibCategoryUi(root) {
+      if (!root || !window.LibraryStorage) return;
+      const cats = LibraryStorage.normalizeCategories?.(LIBRARY_DATA.categories) || [];
+      const sel = root.querySelector("#libLinkCat");
+      if (sel) {
+        const cur = sel.value || "other";
+        sel.innerHTML = cats
+          .map(
+            (c) =>
+              `<option value="${esc(c.id)}" ${c.id === cur || (!cats.some((x) => x.id === cur) && c.id === "other") ? "selected" : ""}>${esc(
+                c.name
+              )}</option>`
+          )
+          .join("");
+      }
+      const chips = root.querySelector("#libCatChips");
+      if (!chips) return;
+      chips.innerHTML = cats
+        .map(
+          (c) => `
+          <span class="cfg-lib-cat-chip" data-cat-id="${esc(c.id)}">
+            <button type="button" data-cat-rename="${esc(c.id)}" title="重命名">${esc(c.name)}</button>
+            <button type="button" class="cfg-lib-x" data-cat-del="${esc(c.id)}" title="删除" ${
+              c.id === "other" ? "disabled" : ""
+            }>×</button>
+          </span>`
+        )
+        .join("");
     },
 
     syncLibBatchUi(root) {
@@ -769,6 +807,74 @@
           await this.renderLibraryAdmin(root);
         } catch (err) {
           setLibStatus(err.message || "添加失败", "err");
+        }
+      });
+
+      root.querySelector("#libCatAdd")?.addEventListener("click", async () => {
+        if (!window.LibraryStorage?.saveCategories) return;
+        const name = String(root.querySelector("#libCatNewName")?.value || "").trim();
+        if (!name) {
+          setLibStatus("请填写新分类名称", "err");
+          return;
+        }
+        this.activeTab = "library";
+        const cats = LibraryStorage.normalizeCategories(LIBRARY_DATA.categories);
+        const id = LibraryStorage.newCatId(name);
+        cats.push({ id, name });
+        setLibStatus("正在添加分类…");
+        try {
+          await LibraryStorage.saveCategories(cats);
+          const input = root.querySelector("#libCatNewName");
+          if (input) input.value = "";
+          setLibStatus("已添加分类：" + name, "ok");
+          await this.renderLibraryAdmin(root);
+          if (window.LibraryUI?.refreshListQuiet) LibraryUI.refreshListQuiet();
+        } catch (err) {
+          setLibStatus(err.message || "添加分类失败", "err");
+        }
+      });
+
+      root.querySelector("#libCatChips")?.addEventListener("click", async (e) => {
+        if (!window.LibraryStorage?.saveCategories) return;
+        const del = e.target.closest("[data-cat-del]");
+        const rename = e.target.closest("[data-cat-rename]");
+        this.activeTab = "library";
+        let cats = LibraryStorage.normalizeCategories(LIBRARY_DATA.categories);
+
+        if (del) {
+          const id = del.dataset.catDel;
+          if (!id || id === "other") return;
+          const hit = cats.find((c) => c.id === id);
+          if (!confirm(`删除分类「${hit?.name || id}」？该分类下的资源将归入「其他」。`)) return;
+          cats = cats.filter((c) => c.id !== id);
+          setLibStatus("正在删除分类…");
+          try {
+            await LibraryStorage.saveCategories(cats);
+            setLibStatus("已删除分类", "ok");
+            await this.renderLibraryAdmin(root);
+            if (window.LibraryUI?.refreshListQuiet) LibraryUI.refreshListQuiet();
+          } catch (err) {
+            setLibStatus(err.message || "删除分类失败", "err");
+          }
+          return;
+        }
+
+        if (rename) {
+          const id = rename.dataset.catRename;
+          const hit = cats.find((c) => c.id === id);
+          if (!hit) return;
+          const name = window.prompt("分类名称", hit.name);
+          if (name == null || !String(name).trim()) return;
+          hit.name = String(name).trim().slice(0, 40);
+          setLibStatus("正在重命名…");
+          try {
+            await LibraryStorage.saveCategories(cats);
+            setLibStatus("已重命名", "ok");
+            await this.renderLibraryAdmin(root);
+            if (window.LibraryUI?.refreshListQuiet) LibraryUI.refreshListQuiet();
+          } catch (err) {
+            setLibStatus(err.message || "重命名失败", "err");
+          }
         }
       });
 
