@@ -21,9 +21,18 @@
   const API_GH = "/api/library-github";
   const GH_PREFS_KEY = "cl-nav-github-release-v1";
   const GH_DEFAULTS = { owner: "xiaochenbian-new", repo: "cl-nav-file" };
+  /** Cloudflare Free/Pro 请求体上限约 100MB，留余量后按 95MB 拦截 */
+  const MAX_UPLOAD_BYTES = 95 * 1024 * 1024;
 
   function apiUrl(path) {
     return window.ClNavApi?.url?.(path) || path;
+  }
+
+  function formatBytes(n) {
+    const v = Number(n) || 0;
+    if (v < 1024) return v + " B";
+    if (v < 1024 * 1024) return (v / 1024).toFixed(v < 10 * 1024 ? 1 : 0) + " KB";
+    return (v / (1024 * 1024)).toFixed(1) + " MB";
   }
 
   function normalizeCategories(list) {
@@ -439,6 +448,17 @@
     async uploadToGitHub(file, meta = {}, onProgressOrOpts) {
       if (!file) throw new Error("未选择文件");
       if (!window.NavAuth?.isLoggedIn?.()) throw new Error("请先登录后再上传");
+      if (file.size > MAX_UPLOAD_BYTES) {
+        throw new Error(
+          "「" +
+            (file.name || "文件") +
+            "」约 " +
+            formatBytes(file.size) +
+            "，超过上限 " +
+            formatBytes(MAX_UPLOAD_BYTES) +
+            "（Cloudflare 请求体限制）。请压缩后上传，或改用外链登记大文件。"
+        );
+      }
       if (typeof location !== "undefined" && location.protocol === "file:" && !window.ClNavApi?.origin?.()) {
         throw new Error("请用 Cloudflare / GitHub Pages 打开后再上传");
       }
@@ -542,13 +562,30 @@
         xhr.onload = () => {
           cleanup();
           const ct = (xhr.getResponseHeader("content-type") || "").toLowerCase();
-          if (ct.includes("text/html")) {
-            reject(new Error("接口未部署：请确认 Cloudflare 已部署 functions/api/library-github.js"));
+          const raw = String(xhr.responseText || "");
+          if (xhr.status === 413) {
+            reject(
+              new Error(
+                "文件过大（超过约 " +
+                  formatBytes(MAX_UPLOAD_BYTES) +
+                  "）。进度到 100% 只表示浏览器发完了，Cloudflare 会拒绝更大请求。"
+              )
+            );
+            return;
+          }
+          if (ct.includes("text/html") || (raw && raw.trimStart().startsWith("<"))) {
+            reject(
+              new Error(
+                xhr.status >= 500
+                  ? "上传接口异常 HTTP " + xhr.status + "（可能超时或文件过大）"
+                  : "接口未部署或返回了错误页 HTTP " + xhr.status
+              )
+            );
             return;
           }
           let data = {};
           try {
-            data = JSON.parse(xhr.responseText || "{}");
+            data = JSON.parse(raw || "{}");
           } catch (_) {
             data = {};
           }
@@ -578,6 +615,8 @@
     loadGhPrefs,
     saveGhPrefs,
     normalizeGhPart,
+    MAX_UPLOAD_BYTES,
+    formatBytes,
 
     async remove(id) {
       if (!id) throw new Error("缺少 id");
@@ -655,6 +694,21 @@
       const list = [...(files || [])].filter(Boolean);
       if (!list.length) return [];
       if (!window.NavAuth?.isLoggedIn?.()) throw new Error("请先登录后再上传");
+      const tooBig = list.filter((f) => f && f.size > MAX_UPLOAD_BYTES);
+      if (tooBig.length) {
+        const names = tooBig
+          .slice(0, 3)
+          .map((f) => "「" + f.name + "」" + formatBytes(f.size))
+          .join("、");
+        throw new Error(
+          "以下文件超过上限 " +
+            formatBytes(MAX_UPLOAD_BYTES) +
+            "：" +
+            names +
+            (tooBig.length > 3 ? " 等" : "") +
+            "。请压缩后上传，或用「外链」登记网盘/直链地址。"
+        );
+      }
       const ids = [];
       for (const file of list) {
         const id = "up_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);

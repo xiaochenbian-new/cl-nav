@@ -697,7 +697,7 @@
                 <div class="cfg-lib-actions">
                   <button type="button" class="cfg-btn" id="ghSavePrefs">保存</button>
                   <button type="button" class="cfg-btn" id="ghTestBtn">测试连接</button>
-                  <span class="settings-tip">xiaochenbian-new / cl-nav-file · &lt;95MB · 最多同时 3 个</span>
+                  <span class="settings-tip">xiaochenbian-new / cl-nav-file · 单文件 &lt;95MB · 最多同时 3 个 · 更大请用外链</span>
                 </div>
               </section>
             </div>
