@@ -279,7 +279,7 @@ export async function onRequest(context) {
         const action = String(body.action || "").trim().toLowerCase();
         const itemId = String(body.id || "").trim();
 
-        if (action === "deleteMany") {
+        if (action === "deletemany") {
           const ids = Array.isArray(body.ids)
             ? body.ids.map((x) => String(x || "").trim()).filter(Boolean)
             : [];
@@ -302,7 +302,7 @@ export async function onRequest(context) {
           return json({ ok: true, deleted: ids.length }, 200, request);
         }
 
-        if (action === "categoriesSave") {
+        if (action === "categoriessave") {
           const categories = normalizeCategories(body.categories);
           const doc = await readCatalogDoc(kv);
           const valid = new Set(categories.map((c) => c.id));
@@ -317,7 +317,7 @@ export async function onRequest(context) {
           return json({ ok: true, categories: saved.categories }, 200, request);
         }
 
-        if (action === "replaceCatalog") {
+        if (action === "replacecatalog") {
           const categories = normalizeCategories(body.categories);
           const items = Array.isArray(body.items) ? body.items : [];
           const doc = await writeCatalogDoc(kv, { categories, items });

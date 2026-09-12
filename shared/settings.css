@@ -953,6 +953,49 @@
   background: var(--panel);
   padding: 0.05rem;
   box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 4%, transparent);
+  position: relative;
+  user-select: none;
+}
+
+.cfg-lib-cat-chip.dragging {
+  opacity: 0.45;
+}
+
+.cfg-lib-cat-chip.drag-before::before,
+.cfg-lib-cat-chip.drag-after::after {
+  content: "";
+  position: absolute;
+  top: 15%;
+  bottom: 15%;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.cfg-lib-cat-chip.drag-before::before {
+  left: -3px;
+}
+
+.cfg-lib-cat-chip.drag-after::after {
+  right: -3px;
+}
+
+.cfg-lib-cat-drag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.2rem;
+  height: 1.55rem;
+  margin-left: 0.15rem;
+  color: var(--muted);
+  cursor: grab;
+  font-size: 11px;
+  letter-spacing: -1px;
+  line-height: 1;
+}
+
+.cfg-lib-cat-drag:active {
+  cursor: grabbing;
 }
 
 .cfg-lib-cat-chip > button[data-cat-rename] {

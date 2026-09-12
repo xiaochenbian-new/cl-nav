@@ -92,7 +92,86 @@
     });
   }
 
-  /** One dialog: 名称 → 地址 → 备注 */
+  /** Horizontal drag-reorder for library category chips */
+  function bindCatChipDrag(listEl, { onReorder }) {
+    if (!listEl || listEl.dataset.dragBound === "1") return;
+    listEl.dataset.dragBound = "1";
+    let dragEl = null;
+
+    listEl.addEventListener("mousedown", (e) => {
+      const handle = e.target.closest("[data-cat-drag]");
+      const chip = e.target.closest(".cfg-lib-cat-chip[data-cat-id]");
+      if (!handle || !chip || !listEl.contains(chip)) return;
+      chip.setAttribute("draggable", "true");
+    });
+
+    listEl.addEventListener("mouseup", () => {
+      listEl.querySelectorAll(".cfg-lib-cat-chip[draggable='true']").forEach((el) => {
+        if (!dragEl) el.setAttribute("draggable", "false");
+      });
+    });
+
+    listEl.addEventListener("dragstart", (e) => {
+      const chip = e.target.closest(".cfg-lib-cat-chip[data-cat-id]");
+      if (!chip || !listEl.contains(chip) || chip.getAttribute("draggable") !== "true") {
+        e.preventDefault();
+        return;
+      }
+      dragEl = chip;
+      chip.classList.add("dragging");
+      try {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", chip.dataset.catId || "cat");
+      } catch (_) {}
+    });
+
+    listEl.addEventListener("dragend", () => {
+      if (dragEl) {
+        dragEl.classList.remove("dragging");
+        dragEl.setAttribute("draggable", "false");
+      }
+      listEl.querySelectorAll(".cfg-lib-cat-chip").forEach((el) => {
+        el.classList.remove("drag-over", "drag-before", "drag-after");
+        el.setAttribute("draggable", "false");
+      });
+      dragEl = null;
+    });
+
+    listEl.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      const chip = e.target.closest(".cfg-lib-cat-chip[data-cat-id]");
+      if (!dragEl || !chip || chip === dragEl || !listEl.contains(chip)) return;
+      const rect = chip.getBoundingClientRect();
+      const before = e.clientX < rect.left + rect.width / 2;
+      listEl.querySelectorAll(".cfg-lib-cat-chip").forEach((el) => {
+        el.classList.remove("drag-over", "drag-before", "drag-after");
+      });
+      chip.classList.add("drag-over", before ? "drag-before" : "drag-after");
+      chip.dataset.dropBefore = before ? "1" : "0";
+      try {
+        e.dataTransfer.dropEffect = "move";
+      } catch (_) {}
+    });
+
+    listEl.addEventListener("drop", (e) => {
+      e.preventDefault();
+      const chip = e.target.closest(".cfg-lib-cat-chip[data-cat-id]");
+      listEl.querySelectorAll(".cfg-lib-cat-chip").forEach((el) => {
+        el.classList.remove("drag-over", "drag-before", "drag-after");
+      });
+      if (!dragEl || !chip || dragEl === chip) return;
+      const items = [...listEl.querySelectorAll(".cfg-lib-cat-chip[data-cat-id]")];
+      const from = items.indexOf(dragEl);
+      let to = items.indexOf(chip);
+      if (from < 0 || to < 0) return;
+      const before = chip.dataset.dropBefore === "1";
+      if (from < to && before) to -= 1;
+      if (from > to && !before) to += 1;
+      if (from === to) return;
+      onReorder(from, to);
+    });
+  }
+
   function openLinkDialog(initial = {}, titleText = "添加网站") {
     return new Promise((resolve) => {
       const old = document.getElementById("cfgLinkDialog");
@@ -533,7 +612,7 @@
           <section class="cfg-lib-cats-panel">
             <div class="cfg-lib-cats-head">
               <strong>资源分类</strong>
-              <span class="settings-tip">点击名称可重命名 · 随 WebDAV / 云端同步</span>
+              <span class="settings-tip">拖动手柄排序 · 点击名称重命名 · 随备份同步</span>
             </div>
             <div class="cfg-lib-cats" id="libCatChips"></div>
             <div class="cfg-lib-cats-add">
@@ -817,7 +896,8 @@
       chips.innerHTML = cats
         .map(
           (c) => `
-          <span class="cfg-lib-cat-chip" data-cat-id="${esc(c.id)}">
+          <span class="cfg-lib-cat-chip" data-cat-id="${esc(c.id)}" draggable="false">
+            <span class="cfg-lib-cat-drag" data-cat-drag title="拖动排序" aria-hidden="true">⠿</span>
             <button type="button" data-cat-rename="${esc(c.id)}" title="重命名">${esc(c.name)}</button>
             ${
               c.id === "other"
@@ -827,6 +907,33 @@
           </span>`
         )
         .join("");
+
+      bindCatChipDrag(chips, {
+        onReorder: async (from, to) => {
+          const list = LibraryStorage.normalizeCategories(LIBRARY_DATA.categories);
+          if (from < 0 || to < 0 || from >= list.length || to >= list.length) return;
+          const [moved] = list.splice(from, 1);
+          list.splice(to, 0, moved);
+          LIBRARY_DATA.categories = list;
+          this.renderLibCategoryUi(root);
+          const status = root.querySelector("#libAdminStatus");
+          const setStatus = (text, kind = "") => {
+            if (!status) return;
+            status.textContent = text || "";
+            status.className = "cfg-status" + (kind ? " " + kind : "");
+          };
+          setStatus("正在保存排序…");
+          try {
+            await LibraryStorage.saveCategories(list);
+            setStatus("分类顺序已保存", "ok");
+            await this.renderLibraryAdmin(root);
+            if (window.LibraryUI?.refreshListQuiet) LibraryUI.refreshListQuiet();
+          } catch (err) {
+            setStatus(err.message || "保存排序失败", "err");
+            await this.renderLibraryAdmin(root);
+          }
+        },
+      });
     },
 
     syncLibBatchUi(root) {
