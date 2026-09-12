@@ -74,7 +74,7 @@
 
     renderToolbar() {
       const badge = document.getElementById("storageBadge");
-      if (badge) badge.textContent = "存储：外链 + KV 目录";
+      if (badge) badge.textContent = "存储：GitHub Releases / 外链";
     },
 
     filtered() {

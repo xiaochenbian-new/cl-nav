@@ -17,6 +17,30 @@
   };
 
   const API = "/api/library";
+  const API_GH = "/api/library-github";
+  const GH_PREFS_KEY = "cl-nav-github-release-v1";
+
+  function loadGhPrefs() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(GH_PREFS_KEY) || "{}");
+      return {
+        owner: String(raw.owner || ""),
+        repo: String(raw.repo || ""),
+        token: String(raw.token || ""),
+      };
+    } catch {
+      return { owner: "", repo: "", token: "" };
+    }
+  }
+
+  function saveGhPrefs(patch) {
+    const next = { ...loadGhPrefs(), ...patch };
+    next.owner = String(next.owner || "").trim().replace(/^@/, "");
+    next.repo = String(next.repo || "").trim();
+    next.token = String(next.token || "").trim();
+    localStorage.setItem(GH_PREFS_KEY, JSON.stringify(next));
+    return next;
+  }
 
   function authHeaders(json) {
     const h = {};
@@ -119,10 +143,61 @@
     },
 
     async upload(file, meta = {}) {
-      // 兼容旧按钮：无 R2 时引导用外链
       if (meta && meta.downloadUrl) return this.addLink({ ...meta, title: meta.title || (file && file.name) });
-      throw new Error("未开通 R2（需绑卡）。请使用「添加外链」填写下载地址。");
+      return this.uploadToGitHub(file, meta);
     },
+
+    /** 上传到 GitHub Releases，并自动写入资源库目录 */
+    async uploadToGitHub(file, meta = {}) {
+      if (!file) throw new Error("未选择文件");
+      if (!window.NavAuth?.isLoggedIn?.()) throw new Error("请先登录后再上传");
+      if (typeof location !== "undefined" && location.protocol === "file:") {
+        throw new Error("请用 Cloudflare Pages 打开后再上传");
+      }
+
+      const gh = { ...loadGhPrefs(), ...(meta.github || {}) };
+      if (!gh.owner || !gh.repo) throw new Error("请先填写并保存 GitHub 仓库 owner / repo");
+      if (!gh.token) throw new Error("请先填写并保存 GitHub Token");
+
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+      fd.append("title", meta.title || file.name);
+      fd.append("desc", meta.desc || "");
+      fd.append("category", meta.category || "other");
+      fd.append("version", meta.version || "—");
+      fd.append("platform", meta.platform || "—");
+      fd.append("ghOwner", gh.owner);
+      fd.append("ghRepo", gh.repo);
+      fd.append("ghToken", gh.token);
+
+      let res;
+      try {
+        res = await fetch(API_GH, {
+          method: "POST",
+          headers: authHeaders(false),
+          body: fd,
+          cache: "no-store",
+        });
+      } catch (err) {
+        throw new Error("无法连接 /api/library-github");
+      }
+
+      const ct = (res.headers.get("content-type") || "").toLowerCase();
+      if (ct.includes("text/html")) {
+        throw new Error("接口未部署：请确认 Cloudflare 已部署 functions/api/library-github.js");
+      }
+      const j = await res.json().catch(() => ({}));
+      if (res.status === 401) throw new Error(j.error || "未授权，请重新登录");
+      if (!res.ok) throw new Error(j.error || "GitHub 上传失败 HTTP " + res.status);
+      if (j.item) {
+        LIBRARY_DATA.items = LIBRARY_DATA.items || [];
+        LIBRARY_DATA.items.unshift(j.item);
+      }
+      return j.item;
+    },
+
+    loadGhPrefs,
+    saveGhPrefs,
 
     async remove(id) {
       if (!id) throw new Error("缺少 id");

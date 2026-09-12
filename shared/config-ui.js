@@ -353,9 +353,42 @@
             <strong>资源库管理</strong>
           </div>
           <p class="settings-tip" style="margin:0 0 0.5rem">
-            无需开通 R2 / 绑卡：把安装包装到 GitHub Releases、蓝奏云等，再在下方登记下载链接。目录存在 Cloudflare KV。
+            推荐：配置 GitHub 后一键上传到 Releases，自动拿到下载链接并写入目录。也可继续用下方「外链」手动登记。
           </p>
+          <div class="cfg-webdav" style="box-shadow:none;border:0;padding:0;margin:0 0 0.75rem">
+            <h4 style="margin:0 0 0.45rem;font-size:13px">GitHub Releases 上传</h4>
+            <div class="cfg-webdav-grid" style="margin-bottom:0.55rem">
+              <label>
+                <span>仓库 Owner</span>
+                <input type="text" id="ghOwner" placeholder="xiaochenbian-new" value="${esc(
+                  (window.LibraryStorage?.loadGhPrefs?.() || {}).owner || ""
+                )}" autocomplete="off" />
+              </label>
+              <label>
+                <span>仓库名 Repo</span>
+                <input type="text" id="ghRepo" placeholder="cl-nav-files" value="${esc(
+                  (window.LibraryStorage?.loadGhPrefs?.() || {}).repo || ""
+                )}" autocomplete="off" />
+              </label>
+              <label style="grid-column:1/-1">
+                <span>GitHub Token（仅保存在本机浏览器）</span>
+                <input type="password" id="ghToken" placeholder="ghp_... 或 github_pat_..." value="${esc(
+                  (window.LibraryStorage?.loadGhPrefs?.() || {}).token || ""
+                )}" autocomplete="off" />
+              </label>
+            </div>
+            <div class="cfg-webdav-row" style="margin-bottom:0.45rem">
+              <button type="button" class="cfg-btn" id="ghSavePrefs">保存 GitHub 配置</button>
+              <button type="button" class="cfg-btn primary" id="ghUploadBtn">选择文件并上传到 Release</button>
+              <input id="ghFileInput" type="file" hidden />
+            </div>
+            <p class="settings-tip" style="margin:0">
+              Token 需对目标仓库有写权限（classic 勾选 <code>repo</code>）。可用单独私有仓库存安装包。单文件建议 &lt; 95MB。
+            </p>
+          </div>
+          <div class="cfg-section-divider"></div>
           <div class="cfg-webdav" style="box-shadow:none;border:0;padding:0;margin:0 0 0.35rem">
+            <h4 style="margin:0 0 0.45rem;font-size:13px">添加外链（可选）</h4>
           <div class="cfg-webdav-grid" style="margin-bottom:0.65rem">
             <label>
               <span>名称</span>
@@ -381,7 +414,7 @@
             </label>
           </div>
           <div class="cfg-webdav-row" style="margin-bottom:0.55rem">
-            <button type="button" class="cfg-btn primary" id="libAdminAddLink">添加外链资源</button>
+            <button type="button" class="cfg-btn" id="libAdminAddLink">添加外链资源</button>
           </div>
           </div>
           <p class="cfg-status" id="libAdminStatus"></p>
@@ -540,6 +573,48 @@
 
       root.querySelector("#cfgLogout")?.addEventListener("click", () => {
         this.logout();
+      });
+
+      root.querySelector("#ghSavePrefs")?.addEventListener("click", () => {
+        if (!window.LibraryStorage?.saveGhPrefs) return;
+        this.activeTab = "library";
+        LibraryStorage.saveGhPrefs({
+          owner: root.querySelector("#ghOwner")?.value || "",
+          repo: root.querySelector("#ghRepo")?.value || "",
+          token: root.querySelector("#ghToken")?.value || "",
+        });
+        setLibStatus("GitHub 配置已保存到本机", "ok");
+      });
+
+      root.querySelector("#ghUploadBtn")?.addEventListener("click", () => {
+        if (window.LibraryStorage?.saveGhPrefs) {
+          LibraryStorage.saveGhPrefs({
+            owner: root.querySelector("#ghOwner")?.value || "",
+            repo: root.querySelector("#ghRepo")?.value || "",
+            token: root.querySelector("#ghToken")?.value || "",
+          });
+        }
+        root.querySelector("#ghFileInput")?.click();
+      });
+
+      root.querySelector("#ghFileInput")?.addEventListener("change", async (e) => {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = "";
+        if (!file || !window.LibraryStorage?.uploadToGitHub) return;
+        this.activeTab = "library";
+        setLibStatus("正在上传到 GitHub Releases（较大文件可能需 1～2 分钟）…");
+        try {
+          const category = root.querySelector("#libLinkCat")?.value || "other";
+          const item = await LibraryStorage.uploadToGitHub(file, {
+            title: root.querySelector("#libLinkTitle")?.value || file.name,
+            desc: root.querySelector("#libLinkDesc")?.value || "",
+            category,
+          });
+          setLibStatus("上传成功：" + (item?.title || file.name), "ok");
+          await this.renderLibraryAdmin(root);
+        } catch (err) {
+          setLibStatus(err.message || "GitHub 上传失败", "err");
+        }
       });
 
       root.querySelector("#libAdminAddLink")?.addEventListener("click", async () => {
