@@ -12,7 +12,7 @@
 
   function localProxyUrl(domain) {
     if (!canUseLocalProxy()) return "";
-    return "/api/favicon?domain=" + encodeURIComponent(domain);
+    return (window.ClNavApi?.url?.("/api/favicon") || "/api/favicon") + "?domain=" + encodeURIComponent(domain);
   }
 
   function remoteUrls(domain) {

@@ -1,7 +1,11 @@
-/** CL Nav — Cloudflare KV 同源多端同步 */
+/** CL Nav — Cloudflare KV 同源 / 跨域多端同步 */
 (function () {
   const PREFS_KEY = "cl-nav-cf-sync-prefs-v1";
   const API_PATH = "/api/sync";
+
+  function syncUrl() {
+    return window.ClNavApi?.url?.(API_PATH) || API_PATH;
+  }
 
   function loadPrefs() {
     try {
@@ -31,19 +35,12 @@
     return next;
   }
 
-  function isFileProtocol() {
-    return typeof location !== "undefined" && location.protocol === "file:";
-  }
-
   function isReady(cfg) {
     const c = cfg || loadPrefs();
     return !!(c.token && c.token.length >= 8);
   }
 
   function validate(cfg) {
-    if (isFileProtocol()) {
-      throw new Error("请用 https://cl-nav.pages.dev 打开后再用云端同步（file:// 无 /api/sync）");
-    }
     if (!cfg.token || cfg.token.length < 8) {
       throw new Error("请设置至少 8 位同步口令（各设备填写相同口令）");
     }
@@ -73,10 +70,12 @@
     }
     let res;
     try {
-      res = await fetch(API_PATH, init);
+      res = await fetch(syncUrl(), init);
     } catch (err) {
       throw new Error(
-        "无法连接同步接口 /api/sync（请确认已部署在 Cloudflare Pages）。" +
+        "无法连接同步接口 " +
+          syncUrl() +
+          "（GitHub Pages 会自动走 cl-nav.pages.dev）。" +
           (err && err.message ? " " + err.message : "")
       );
     }
@@ -140,7 +139,7 @@
     if (res.status === 401) return "测试失败：同步口令无效";
     if (res.status === 404) return "连接成功：云端可达（尚无备份，上传后即可多端同步）";
     if (res.status === 200) return "连接成功：云端可达，已有备份";
-    if (res.status === 0) return "测试失败：无法连接 /api/sync";
+    if (res.status === 0) return "测试失败：无法连接 " + syncUrl();
     return "测试失败：HTTP " + res.status;
   }
 

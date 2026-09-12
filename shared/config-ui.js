@@ -755,7 +755,7 @@
                 ? "云端有更新备份，建议「从云端恢复」或「立即同步」。"
                 : "勾选「自动同步」并保存后：添加/修改网站约 0.4 秒会上传云端；其它设备打开或切回页面时自动拉取。"
             }</p>
-            <p class="settings-tip">在 Cloudflare Dashboard → Workers &amp; Pages → cl-nav → Settings → Functions → KV namespace bindings，添加绑定，变量名填 <code>CL_NAV_SYNC</code>（先创建任意 KV 命名空间即可）。部署后在此设置相同口令。</p>
+            <p class="settings-tip">在 Cloudflare Dashboard → Workers &amp; Pages → cl-nav → Settings → Functions → KV namespace bindings，添加绑定，变量名填 <code>CL_NAV_SYNC</code>。GitHub Pages 会自动走 <code>cl-nav.pages.dev</code> 的同步接口，两站填相同口令即可互通。</p>
           </div>
           <div class="cfg-section-divider"></div>
           <details class="cfg-webdav-details">

@@ -22,6 +22,10 @@
   const GH_PREFS_KEY = "cl-nav-github-release-v1";
   const GH_DEFAULTS = { owner: "xiaochenbian-new", repo: "cl-nav-file" };
 
+  function apiUrl(path) {
+    return window.ClNavApi?.url?.(path) || path;
+  }
+
   function normalizeCategories(list) {
     const seen = new Set();
     const out = [];
@@ -133,14 +137,11 @@
   }
 
   async function api(method, { id, download, body, headers } = {}) {
-    if (isFileProtocol()) {
-      throw new Error("请用 Cloudflare Pages 打开站点（file:// 无 /api/library）");
-    }
-    let url = API;
+    let url = apiUrl(API);
     const q = [];
     if (id) q.push("id=" + encodeURIComponent(id));
     if (download) q.push("download=1");
-    if (q.length) url += "?" + q.join("&");
+    if (q.length) url += (url.includes("?") ? "&" : "?") + q.join("&");
 
     const init = { method, headers: { ...(headers || {}) }, cache: "no-store" };
     if (body != null) init.body = body;
@@ -149,7 +150,7 @@
     try {
       res = await fetch(url, init);
     } catch (err) {
-      throw new Error("无法连接资源库接口 /api/library");
+      throw new Error("无法连接资源库接口 " + apiUrl(API));
     }
 
     const ct = (res.headers.get("content-type") || "").toLowerCase();
@@ -411,14 +412,14 @@
 
       let res;
       try {
-        res = await fetch(API_GH, {
+        res = await fetch(apiUrl(API_GH), {
           method: "POST",
           headers: authHeaders(false),
           body: fd,
           cache: "no-store",
         });
       } catch (err) {
-        throw new Error("无法连接 /api/library-github");
+        throw new Error("无法连接 " + apiUrl(API_GH));
       }
       const ct = (res.headers.get("content-type") || "").toLowerCase();
       if (ct.includes("text/html")) {
@@ -438,8 +439,8 @@
     async uploadToGitHub(file, meta = {}, onProgress) {
       if (!file) throw new Error("未选择文件");
       if (!window.NavAuth?.isLoggedIn?.()) throw new Error("请先登录后再上传");
-      if (typeof location !== "undefined" && location.protocol === "file:") {
-        throw new Error("请用 Cloudflare Pages 打开后再上传");
+      if (typeof location !== "undefined" && location.protocol === "file:" && !window.ClNavApi?.origin?.()) {
+        throw new Error("请用 Cloudflare / GitHub Pages 打开后再上传");
       }
 
       const gh = { ...loadGhPrefs(), ...(meta.github || {}) };
@@ -477,7 +478,7 @@
 
       const j = await new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open("POST", API_GH);
+        xhr.open("POST", apiUrl(API_GH));
         xhr.responseType = "text";
         xhr.timeout = 15 * 60 * 1000;
 
@@ -501,7 +502,7 @@
           notify({ ratio: 0.96, phase: "server", loaded: file.size, total: file.size });
         };
 
-        xhr.onerror = () => reject(new Error("无法连接 /api/library-github"));
+        xhr.onerror = () => reject(new Error("无法连接 " + apiUrl(API_GH)));
         xhr.ontimeout = () => reject(new Error("上传超时，请稍后重试或换较小文件"));
 
         xhr.onload = () => {

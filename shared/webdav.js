@@ -118,10 +118,11 @@
 
     const prefs = loadPrefs();
     let fetchUrl = url;
-    // file:// 下没有 /api/webdav，强制直连（仍会受 CORS 限制）
-    const useProxy = prefs.useProxy && prefs.proxyPath && !isFileProtocol();
+    const useProxy = prefs.useProxy && prefs.proxyPath;
     if (useProxy) {
-      const base = String(prefs.proxyPath).trim() || "/api/webdav";
+      const base = window.ClNavApi?.url?.(String(prefs.proxyPath).trim() || "/api/webdav") ||
+        String(prefs.proxyPath).trim() ||
+        "/api/webdav";
       fetchUrl = base + (base.includes("?") ? "&" : "?") + "url=" + encodeURIComponent(url);
     }
 
