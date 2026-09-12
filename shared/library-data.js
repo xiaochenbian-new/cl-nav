@@ -47,6 +47,14 @@
     } catch (err) {
       throw new Error("无法连接资源库接口 /api/library");
     }
+
+    const ct = (res.headers.get("content-type") || "").toLowerCase();
+    if (ct.includes("text/html")) {
+      throw new Error(
+        "云端还是旧版本（/api/library 未生效）。请在 Cloudflare 创建 R2 桶「cl-nav-library」后，到 Pages → Deployments 里 Retry 最新部署。"
+      );
+    }
+
     return res;
   }
 

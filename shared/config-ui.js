@@ -358,7 +358,9 @@
             访客在「资源库」页只能下载。上传 / 删除请在此操作（需登录）。文件存 Cloudflare R2，目录索引在 KV。
           </p>
           <p class="settings-tip" style="margin:0 0 0.5rem">
-            首次使用：Dashboard → R2 → Create bucket，名称填 <code>cl-nav-library</code>（与 wrangler.toml 一致）后重新部署。单文件建议 &lt; 95MB。
+            若提示旧版本 / 无法下载：先在 Dashboard → R2 → Create bucket，名称必须是
+            <code>cl-nav-library</code>，再打开 Pages → cl-nav → Deployments → 对最新一次点 Retry deployment。
+            单文件建议 &lt; 95MB。仅 Cloudflare 站点可用（GitHub Pages 无 R2）。
           </p>
           <p class="cfg-status" id="libAdminStatus"></p>
           <div class="cfg-list" id="libAdminList"></div>
