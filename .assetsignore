@@ -1,0 +1,7 @@
+# Cloudflare Pages：这些文件不发布（仅站点文件对外）
+.github
+scripts
+node_modules
+README.md
+.gitignore
+.assetsignore

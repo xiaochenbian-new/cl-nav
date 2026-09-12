@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>方案 3 · 工具箱优先 — CL Nav</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../shared/portal.css" />
+  <style>
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.55rem 1rem;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    .brand { font-weight: 700; font-size: 1.15rem; }
+    .brand span { color: var(--accent); }
+    .top-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.15rem 1rem;
+      margin-left: auto;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .top-nav a:hover { color: var(--accent); }
+
+    .search-row {
+      display: grid;
+      grid-template-columns: 100px 1fr auto;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem 1rem 0.3rem;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .logo-mark {
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .logo-mark .dot {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: var(--accent); color: #fff;
+      display: grid; place-items: center; font-size: 11px;
+    }
+    .search-row .search-box { max-width: 620px; width: 100%; }
+    .search-actions { display: flex; gap: 0.4rem; }
+    .search-actions button {
+      width: 34px; height: 34px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 10px;
+      cursor: pointer;
+      color: var(--muted);
+    }
+    .hot-wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 1rem 0.85rem calc(100px + 2rem);
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: var(--side-w) 1fr;
+      gap: 0.85rem;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0.5rem 1rem 2rem;
+      align-items: start;
+    }
+    .side {
+      position: sticky;
+      top: 0.75rem;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 0.4rem 0.25rem;
+    }
+    .main { display: grid; gap: 0.85rem; min-width: 0; }
+
+    .tools-hero {
+      padding: 1.1rem 1.15rem 1.2rem;
+      background:
+        linear-gradient(135deg, rgba(59, 130, 246, 0.06), transparent 55%),
+        var(--panel);
+    }
+    .tools-hero .card-h { margin-bottom: 0.9rem; }
+    .tools-hero .badge {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent);
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 999px;
+      padding: 0.15rem 0.55rem;
+    }
+    .pills-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0.55rem;
+    }
+    .pills-grid .pill {
+      justify-content: center;
+      padding: 0.65rem 0.5rem;
+      border-radius: 10px;
+      font-weight: 500;
+    }
+
+    .row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.85rem;
+    }
+    .links-wrap { display: flex; flex-wrap: wrap; gap: 0.25rem 0.15rem; }
+    .widgets {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr 0.9fr;
+      gap: 0.85rem;
+      align-items: start;
+    }
+    .widgets .stack { display: grid; gap: 0.85rem; }
+
+    @media (max-width: 960px) {
+      .pills-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .widgets { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 860px) {
+      .search-row { grid-template-columns: 1fr; }
+      .hot-wrap { padding-left: 1rem; }
+      .shell { grid-template-columns: 1fr; }
+      .side { position: static; }
+      .side-menu { flex-direction: row; overflow-x: auto; }
+      .side-menu a { white-space: nowrap; padding: 0.45rem 0.7rem; }
+      .pills-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .row-2, .widgets { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="back-bar">
+    <a href="../../index.html">← 返回预览首页</a>
+    <span>方案 3 · 工具箱优先</span>
+  </div>
+
+  <div class="util-bar">
+    <span id="dateText"></span>
+    <div class="right" id="topUtils"></div>
+  </div>
+
+  <div class="header-row">
+    <div class="brand">CL <span>Nav</span></div>
+    <nav class="top-nav" id="topNav"></nav>
+  </div>
+
+  <div class="search-row">
+    <div class="logo-mark"><span class="dot">CL</span> Nav</div>
+    <form class="search-box" id="searchForm" action="#" method="get">
+      <select id="engine" aria-label="搜索引擎"></select>
+      <input id="q" type="search" placeholder="搜索工具 / 文档 / 站点…" autocomplete="off" />
+      <button type="submit">搜索</button>
+    </form>
+    <div class="search-actions">
+      <button type="button" title="设置">⚙</button>
+      <button type="button" title="皮肤">◐</button>
+    </div>
+  </div>
+  <div class="hot-wrap">
+    <div class="hot-tags" id="hotTags"></div>
+  </div>
+
+  <div class="shell">
+    <aside class="side">
+      <nav class="side-menu" id="sideMenu"></nav>
+    </aside>
+    <div class="main">
+      <section class="card tools-hero" id="tools">
+        <div class="card-h">
+          <span>工具箱</span>
+          <span class="badge">优先展示 · 全量入口</span>
+        </div>
+        <div class="pills-grid" id="toolPills"></div>
+      </section>
+
+      <div class="row-2">
+        <section class="card" id="common">
+          <div class="card-h"><span>常用</span><a class="more" href="#">更多</a></div>
+          <div class="links-wrap" id="commonLinks"></div>
+        </section>
+        <section class="card" id="ai">
+          <div class="card-h"><span>AI</span><a class="more" href="#">更多</a></div>
+          <div class="links-wrap" id="aiLinks"></div>
+        </section>
+      </div>
+
+      <div class="widgets">
+        <div class="stack">
+          <div class="music">
+            <div class="cover"></div>
+            <div style="flex:1;min-width:0">
+              <strong>Coding Focus</strong>
+              <span>Instrumental · 48 min</span>
+              <div class="bar"><i></i></div>
+            </div>
+          </div>
+          <section class="card">
+            <div class="card-h"><span>热门资讯</span><a class="more" href="#">更多</a></div>
+            <ul class="news-list" id="hotNews"></ul>
+          </section>
+        </div>
+        <section class="card" id="mail">
+          <div class="card-h"><span>邮箱</span><a class="more" href="#">更多</a></div>
+          <div class="links-wrap" id="mailLinks"></div>
+        </section>
+        <div class="stack">
+          <section class="card" id="cloud">
+            <div class="card-h"><span>云服务</span><a class="more" href="#">更多</a></div>
+            <div class="links-wrap" id="cloudLinks"></div>
+          </section>
+          <a class="add-card" href="#">＋ 添加卡片</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../../shared/data.js"></script>
+  <script src="../../shared/portal.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("dateText").textContent = NAV_DATA.dateText;
+      document.getElementById("topUtils").innerHTML = Portal.topUtils();
+      document.getElementById("topNav").innerHTML = Portal.topNav();
+      document.getElementById("engine").innerHTML = Portal.engineOptions();
+      document.getElementById("hotTags").innerHTML = Portal.hotTags();
+      document.getElementById("sideMenu").innerHTML = Portal.sideMenu("tools");
+      document.getElementById("toolPills").innerHTML = Portal.pillTools(NAV_DATA.tools);
+      document.getElementById("commonLinks").innerHTML = Portal.iconLinks(NAV_DATA.common);
+      document.getElementById("aiLinks").innerHTML = Portal.iconLinks(NAV_DATA.ai);
+      document.getElementById("mailLinks").innerHTML = Portal.iconLinks(NAV_DATA.mail);
+      document.getElementById("cloudLinks").innerHTML = Portal.iconLinks(NAV_DATA.cloud);
+      document.getElementById("hotNews").innerHTML = Portal.hotNews();
+      Portal.bindSearch("#searchForm", "#engine", "#q");
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CL Nav — 开发者工具导航</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="shared/portal.css" />
+  <style>
+    /*
+      布局目标（图2）：
+      - 头部 / 搜索 / 热词 始终在顶部
+      - 分类卡片左缘与搜索框左缘对齐
+      - 侧栏在主内容左侧、位于分类区域旁，滚动时悬停在视口中部
+    */
+    .page {
+      --side-gap: 0.85rem;
+      width: min(calc(1180px + var(--side-w) + var(--side-gap)), calc(100% - 1rem));
+      margin: 0 auto;
+      padding: 0.85rem 0.5rem 2.5rem;
+      box-sizing: border-box;
+      display: grid;
+      grid-template-columns: var(--side-w) minmax(0, 1fr);
+      grid-template-rows: auto auto;
+      column-gap: var(--side-gap);
+      align-items: start;
+    }
+
+    .shell-top {
+      grid-column: 2;
+      grid-row: 1;
+      min-width: 0;
+    }
+
+    .side-wrap {
+      grid-column: 1;
+      grid-row: 2;
+      position: sticky;
+      top: 28vh;
+      z-index: 5;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 0.4rem 0.25rem 0.5rem;
+      width: var(--side-w);
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .side-top {
+      border: 0;
+      border-top: 1px solid var(--line);
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 0.55rem 0.2rem 0.35rem;
+      cursor: pointer;
+      border-radius: 0 0 8px 8px;
+    }
+
+    .side-top:hover {
+      color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .shell-main {
+      grid-column: 2;
+      grid-row: 2;
+      min-width: 0;
+    }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      flex-wrap: wrap;
+      padding: 0.35rem 0 0.55rem;
+    }
+
+    .brand-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      white-space: nowrap;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #3b82f6, #60a5fa);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      font-size: 12px;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+
+    .brand {
+      font-weight: 700;
+      font-size: 1.2rem;
+      letter-spacing: -0.02em;
+    }
+
+    .brand span { color: var(--accent); }
+
+    .tagline {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .top-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.15rem 0.95rem;
+      margin-left: auto;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .top-nav a:hover,
+    .top-nav a.active { color: var(--accent); }
+
+    .settings-panel {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: rgba(15, 23, 42, 0.32);
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+    }
+
+    .settings-panel[hidden] { display: none !important; }
+
+    .settings-card {
+      width: min(920px, 100%);
+      height: min(88vh, 720px);
+      max-height: min(88vh, 720px);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .settings-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+
+    .settings-head button {
+      border: 0;
+      background: transparent;
+      font-size: 1.25rem;
+      line-height: 1;
+      cursor: pointer;
+      color: var(--muted);
+    }
+
+    .settings-body {
+      padding: 1rem;
+      overflow: auto;
+      display: grid;
+      gap: 0.85rem;
+      flex: 1;
+      min-height: 0;
+      align-content: start;
+    }
+
+    .cfg-pane {
+      min-height: 520px;
+    }
+
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+
+    .settings-row .search-actions button {
+      width: auto;
+      padding: 0.4rem 0.7rem;
+      font-size: 12px;
+    }
+
+    .settings-tip {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .cfg-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+
+    .cfg-tabs button {
+      border: 1px solid var(--line);
+      background: var(--bg);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 0.35rem 0.8rem;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .cfg-tabs button.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .cfg-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.55rem;
+    }
+
+    .cfg-btn, .cfg-item-actions button, .cfg-data-actions button {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 0.35rem 0.6rem;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .cfg-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .cfg-btn.danger { color: #dc2626; border-color: #fecaca; }
+    .cfg-item-actions button:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    .cfg-list { display: grid; gap: 0.45rem; }
+
+    .cfg-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.6rem;
+      padding: 0.65rem 0.7rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--bg) 60%, var(--panel));
+      transition: border-color 0.12s, box-shadow 0.12s, opacity 0.12s;
+    }
+
+    .cfg-item.dragging {
+      opacity: 0.45;
+    }
+
+    .cfg-item.drag-over {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+    }
+
+    .cfg-drag {
+      flex-shrink: 0;
+      width: 1.1rem;
+      text-align: center;
+      color: var(--muted);
+      cursor: grab;
+      user-select: none;
+      font-size: 14px;
+      line-height: 1;
+      letter-spacing: -1px;
+    }
+
+    .cfg-drag:active { cursor: grabbing; }
+
+    .cfg-check {
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+
+    .cfg-check input {
+      width: 15px;
+      height: 15px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .cfg-batch-bar {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .cfg-batch-bar .chk {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 12px;
+      color: var(--ink);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .cfg-item-main { min-width: 0; display: grid; gap: 0.15rem; flex: 1; }
+    .cfg-item-main strong { font-size: 13px; }
+    .cfg-item-main span {
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cfg-item-actions { display: flex; gap: 0.3rem; flex-shrink: 0; flex-wrap: wrap; }
+
+    .cfg-split {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 0.85rem;
+      min-height: 480px;
+    }
+
+    @media (max-width: 720px) {
+      .cfg-split { grid-template-columns: 1fr; }
+    }
+
+    .cfg-cat {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.4rem;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 8px;
+      padding: 0.55rem 0.65rem;
+      font: inherit;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .cfg-cat.active {
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .cfg-cat em {
+      font-style: normal;
+      font-size: 11px;
+      color: var(--muted);
+      background: var(--bg);
+      padding: 0.1rem 0.4rem;
+      border-radius: 999px;
+    }
+
+    .cfg-data-actions { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 0.55rem; }
+
+    .cfg-json {
+      width: 100%;
+      min-height: 120px;
+      max-height: 200px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 0.7rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      background: var(--bg);
+      color: var(--ink);
+      resize: vertical;
+    }
+
+    .cfg-dialog-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 120;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+      background: rgba(15, 23, 42, 0.45);
+    }
+
+    .cfg-dialog {
+      width: min(420px, 100%);
+      background: var(--panel);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1.1rem 1.15rem 1rem;
+      box-shadow: 0 18px 50px rgba(15, 23, 42, 0.22);
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .cfg-dialog h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .cfg-field {
+      display: grid;
+      gap: 0.3rem;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .cfg-field em {
+      font-style: normal;
+      opacity: 0.75;
+    }
+
+    .cfg-field input {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0.55rem 0.7rem;
+      font: inherit;
+      font-size: 13px;
+      color: var(--ink);
+      background: var(--bg);
+    }
+
+    .cfg-field input:focus {
+      outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
+      border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+    }
+
+    .cfg-dialog-err {
+      margin: 0;
+      font-size: 12px;
+      color: #dc2626;
+    }
+
+    .cfg-dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.45rem;
+      margin-top: 0.15rem;
+    }
+
+    .cfg-webdav {
+      display: grid;
+      gap: 0.65rem;
+      margin-bottom: 1rem;
+      padding: 0.85rem;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--bg) 55%, var(--panel));
+    }
+
+    .cfg-webdav h4 {
+      margin: 0;
+      font-size: 13px;
+    }
+
+    .cfg-webdav-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.55rem;
+    }
+
+    @media (max-width: 640px) {
+      .cfg-webdav-grid { grid-template-columns: 1fr; }
+    }
+
+    .cfg-webdav-grid label,
+    .cfg-webdav > label.cfg-field {
+      display: grid;
+      gap: 0.25rem;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .cfg-webdav input[type="text"],
+    .cfg-webdav input[type="password"],
+    .cfg-webdav input[type="url"] {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0.5rem 0.65rem;
+      font: inherit;
+      font-size: 13px;
+      color: var(--ink);
+      background: var(--panel);
+    }
+
+    .cfg-webdav-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.45rem;
+    }
+
+    .cfg-webdav-row label.chk {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      color: var(--ink);
+      font-size: 12px;
+      margin-right: 0.4rem;
+    }
+
+    .cfg-status {
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+      min-height: 1.3em;
+    }
+
+    .cfg-status.ok { color: #059669; }
+    .cfg-status.err { color: #dc2626; }
+    .cfg-status.warn { color: #d97706; }
+
+    .cfg-section-divider {
+      height: 1px;
+      background: var(--line);
+      margin: 0.35rem 0 0.15rem;
+    }
+
+    .hot-tags a {
+      display: inline-block;
+    }
+
+    .search-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 0.75rem;
+      align-items: center;
+      margin-top: 0.35rem;
+      width: 100%;
+      max-width: none;
+    }
+
+    .search-actions {
+      display: flex;
+      gap: 0.4rem;
+    }
+
+    .search-actions button {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      color: var(--muted);
+    }
+
+    .search-actions button:hover,
+    .search-actions button.active {
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+      background: var(--accent-soft);
+    }
+
+    .main-stack {
+      display: grid;
+      gap: 0.85rem;
+      margin-top: 1rem;
+      min-width: 0;
+    }
+
+    .cat-card {
+      scroll-margin-top: 1rem;
+      width: 100%;
+    }
+
+    .cat-card.is-target {
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent), var(--shadow);
+    }
+
+    @media (max-width: 900px) {
+      .page {
+        width: min(1180px, calc(100% - 1.5rem));
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+      }
+      .shell-top,
+      .shell-main,
+      .side-wrap {
+        grid-column: 1;
+        grid-row: auto;
+      }
+      .side-wrap {
+        position: static;
+        width: 100%;
+        order: 3;
+      }
+      .shell-top { order: 1; }
+      .shell-main { order: 2; }
+      .side-menu {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        gap: 0.25rem;
+      }
+      .side-menu button { padding: 0.4rem 0.65rem; }
+      .top-nav { margin-left: 0; width: 100%; }
+      .search-row { max-width: none; grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="shell-top">
+      <header class="header-row">
+        <div class="brand-wrap">
+          <div class="brand-mark">CL</div>
+          <div>
+            <div class="brand">CL <span>Nav</span></div>
+          </div>
+          <span class="tagline" id="tagline">开发者工具导航</span>
+        </div>
+        <nav class="top-nav" id="topNav" aria-label="主导航"></nav>
+      </header>
+
+      <div class="search-row">
+        <form class="search-box" id="searchForm" role="search">
+          <select id="engine" aria-label="搜索引擎"></select>
+          <input id="q" type="search" placeholder="搜索工具、文档、AI…" autocomplete="off" />
+          <button type="submit">搜索</button>
+        </form>
+        <div class="search-actions" aria-label="主题">
+          <button type="button" data-theme-btn="light" title="浅色">☀</button>
+          <button type="button" data-theme-btn="dark" title="深色">☾</button>
+        </div>
+      </div>
+      <div class="hot-tags" id="hotTags"></div>
+    </div>
+
+    <aside class="side-wrap">
+      <nav class="side-menu" id="sideMenu" aria-label="分类路由"></nav>
+      <button type="button" class="side-top" id="backTop" title="返回顶部">↑ 顶部</button>
+    </aside>
+
+    <div class="shell-main">
+      <div class="main-stack" id="mainPanel"></div>
+    </div>
+  </div>
+
+  <div class="settings-panel" id="settingsPanel" hidden>
+    <div class="settings-card">
+      <div class="settings-head">
+        <strong>设置</strong>
+        <button type="button" id="settingsClose" aria-label="关闭">×</button>
+      </div>
+      <div class="settings-body" id="settingsBody"></div>
+    </div>
+  </div>
+
+  <script src="shared/data.js"></script>
+  <script src="shared/favicon-cache.js"></script>
+  <script src="shared/store.js"></script>
+  <script src="shared/webdav.js"></script>
+  <script src="shared/portal.js"></script>
+  <script src="shared/config-ui.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js").catch(() => {});
+      });
+    }
+  </script>
+  <script>
+    let cfg = NavStore.get();
+    let menuIds = cfg.categories.map((c) => c.id);
+    let activeId = "";
+    let selectMode = "none";
+
+    function refreshFromStore() {
+      cfg = NavStore.get();
+      menuIds = cfg.categories.map((c) => c.id);
+      document.getElementById("tagline").textContent = cfg.tagline || "";
+      document.getElementById("engine").innerHTML = Portal.engineOptions();
+      document.getElementById("hotTags").innerHTML = Portal.quickLinks(cfg.quickLinks);
+      document.getElementById("sideMenu").innerHTML = Portal.sideMenu(
+        cfg.categories,
+        selectMode === "click" ? activeId : ""
+      );
+      document.getElementById("topNav").innerHTML = Portal.topNav();
+      renderAllCategories();
+      if (selectMode === "click" && activeId && menuIds.includes(activeId)) setSideActive(activeId);
+      else clearSideActive();
+      Portal.bindTheme();
+    }
+
+    function renderAllCategories() {
+      const panel = document.getElementById("mainPanel");
+      panel.innerHTML = cfg.categories
+        .map((cat) => {
+          const links = (cat.links || []).map((l) => NavStore.normalizeLink(l));
+          return `
+            <section class="card cat-card" id="cat-${cat.id}" data-cat="${cat.id}">
+              <div class="card-h"><span>${cat.name}</span></div>
+              <div class="links-wrap">${Portal.iconLinks(links)}</div>
+            </section>`;
+        })
+        .join("");
+      Portal.hydrateFavicons(panel);
+      const domains = cfg.categories.flatMap((c) =>
+        (c.links || []).map((l) => l.domain || NavStore.domainFromUrl(l.url)).filter(Boolean)
+      );
+      Portal.prefetchFavicons(domains);
+    }
+
+    function clearSideActive() {
+      activeId = "";
+      document.querySelectorAll("#sideMenu [data-id]").forEach((el) => el.classList.remove("active"));
+      document.querySelectorAll("#topNav [data-id]").forEach((el) => el.classList.remove("active"));
+      document.querySelectorAll(".cat-card").forEach((el) => el.classList.remove("is-target"));
+    }
+
+    function setSideActive(id) {
+      if (!id || !cfg.categories.some((c) => c.id === id)) {
+        clearSideActive();
+        return;
+      }
+      activeId = id;
+      document.querySelectorAll("#sideMenu [data-id]").forEach((el) => {
+        el.classList.toggle("active", el.dataset.id === id);
+      });
+      document.querySelectorAll("#topNav [data-id]").forEach((el) => {
+        const catName = cfg.categories.find((c) => c.id === id)?.name || "";
+        const active =
+          (el.dataset.target && el.dataset.target === id) ||
+          (el.dataset.action === "route" && el.dataset.id === "library" && (id === "resource" || catName.includes("资源")));
+        // 资源库已是独立页，不再跟侧栏分类联动高亮
+        if (el.dataset.action === "page") {
+          el.classList.remove("active");
+          return;
+        }
+        el.classList.toggle("active", Boolean(active));
+      });
+      document.querySelectorAll(".cat-card").forEach((el) => {
+        el.classList.toggle("is-target", el.dataset.cat === id);
+      });
+    }
+
+    function scrollToCategory(id) {
+      const el = document.getElementById(`cat-${id}`);
+      if (!el) return;
+      const top = Math.max(0, window.scrollY + el.getBoundingClientRect().top - 12);
+      window.scrollTo({ top, behavior: "smooth" });
+    }
+
+    /** Click-nav locks spy until user scrolls again (avoids last section like 资源 → 学习). */
+    let routeLockUntil = 0;
+
+    function lockSpyForRoute() {
+      selectMode = "click";
+      // Ignore accidental wheel during smooth scroll
+      routeLockUntil = Date.now() + 1000;
+    }
+
+    function releaseSpyOnUserScroll() {
+      if (selectMode !== "click") return;
+      if (Date.now() < routeLockUntil) return;
+      selectMode = "none";
+      // Spy will update on the following scroll events
+      window.requestAnimationFrame(() => syncActiveByScroll());
+    }
+
+    function routeTo(id, { scroll = true, updateHash = true } = {}) {
+      if (!cfg.categories.some((c) => c.id === id)) return;
+      setSideActive(id);
+      if (updateHash) history.replaceState(null, "", `#${id}`);
+      if (scroll) {
+        lockSpyForRoute();
+        scrollToCategory(id);
+      } else {
+        selectMode = "none";
+      }
+    }
+
+    function backToTop() {
+      selectMode = "none";
+      routeLockUntil = 0;
+      clearSideActive();
+      history.replaceState(null, "", location.pathname + location.search);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openSettings() {
+      NavConfigUI.open();
+      history.replaceState(null, "", "#settings");
+    }
+
+    function closeSettings() {
+      NavConfigUI.close();
+      if (activeId) history.replaceState(null, "", `#${activeId}`);
+      else history.replaceState(null, "", location.pathname + location.search);
+    }
+
+    function syncActiveByScroll() {
+      if (selectMode === "click") {
+        if (activeId) setSideActive(activeId);
+        return;
+      }
+      if (window.scrollY < 80) {
+        clearSideActive();
+        return;
+      }
+
+      // Last section (资源) often cannot reach top threshold — activate when near page bottom
+      const pageH = document.documentElement.scrollHeight;
+      const viewBottom = window.scrollY + window.innerHeight;
+      if (menuIds.length && pageH - viewBottom < 100) {
+        setSideActive(menuIds[menuIds.length - 1]);
+        return;
+      }
+
+      let current = "";
+      for (const id of menuIds) {
+        const el = document.getElementById(`cat-${id}`);
+        if (el && el.getBoundingClientRect().top <= 120) current = id;
+      }
+      if (current) setSideActive(current);
+      else clearSideActive();
+    }
+
+    document.getElementById("sideMenu").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-id]");
+      if (!btn) return;
+      e.preventDefault();
+      NavConfigUI.close();
+      routeTo(btn.dataset.id);
+    });
+
+    document.getElementById("backTop").addEventListener("click", () => {
+      NavConfigUI.close();
+      backToTop();
+    });
+
+    document.getElementById("topNav").addEventListener("click", (e) => {
+      const a = e.target.closest("a[data-action]");
+      if (!a) return;
+      if (a.dataset.action === "page") {
+        // allow normal navigation to library.html etc.
+        return;
+      }
+      e.preventDefault();
+      if (a.dataset.action === "settings") {
+        openSettings();
+        return;
+      }
+      NavConfigUI.close();
+      if (a.dataset.action === "route") {
+        const target =
+          cfg.categories.find((c) => c.id === a.dataset.target)?.id ||
+          cfg.categories.find((c) => (c.name || "").includes("资源"))?.id ||
+          cfg.categories[0]?.id;
+        if (target) routeTo(target);
+      }
+    });
+
+    document.getElementById("settingsClose")?.addEventListener("click", closeSettings);
+    document.getElementById("settingsPanel")?.addEventListener("click", (e) => {
+      if (e.target.id === "settingsPanel") closeSettings();
+    });
+
+    // Only user scroll intent resumes spy (not programmatic smooth-scroll end)
+    window.addEventListener("wheel", releaseSpyOnUserScroll, { passive: true });
+    window.addEventListener("touchmove", releaseSpyOnUserScroll, { passive: true });
+    window.addEventListener(
+      "keydown",
+      (e) => {
+        if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(e.key)) {
+          releaseSpyOnUserScroll();
+        }
+      },
+      { passive: true }
+    );
+
+    let lastScrollY = window.scrollY;
+    window.addEventListener(
+      "scroll",
+      () => {
+        // Scrollbar drag after route lock also resumes spy
+        if (selectMode === "click" && Date.now() >= routeLockUntil) {
+          if (Math.abs(window.scrollY - lastScrollY) > 2) {
+            selectMode = "none";
+          }
+        }
+        lastScrollY = window.scrollY;
+        window.clearTimeout(syncActiveByScroll._t);
+        syncActiveByScroll._t = window.setTimeout(syncActiveByScroll, 50);
+      },
+      { passive: true }
+    );
+
+    window.addEventListener("hashchange", () => {
+      const id = location.hash.replace("#", "");
+      if (id === "settings") {
+        openSettings();
+        return;
+      }
+      NavConfigUI.close();
+      if (id && cfg.categories.some((c) => c.id === id)) routeTo(id, { updateHash: false });
+      else {
+        selectMode = "none";
+        clearSideActive();
+      }
+    });
+
+    NavStore.subscribe(() => {
+      const keepCat = activeId;
+      const keepMode = selectMode;
+      refreshFromStore();
+      if (keepMode === "click" && keepCat && menuIds.includes(keepCat)) {
+        selectMode = "click";
+        setSideActive(keepCat);
+      }
+      if (!document.getElementById("settingsPanel").hidden) NavConfigUI.render();
+    });
+
+    refreshFromStore();
+    Portal.bindSearch();
+
+    // WebDAV: pull when tab becomes visible again (like todo-app ON_RESUME)
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible" || !window.NavWebDav) return;
+      const p = NavWebDav.loadPrefs();
+      if (!p.autoBackup || !NavWebDav.isReady(p)) return;
+      NavWebDav.sync("PULL").catch(() => {});
+    });
+
+    const fromHash = location.hash.replace("#", "");
+    if (fromHash === "settings") {
+      openSettings();
+      selectMode = "none";
+      clearSideActive();
+    } else {
+      selectMode = "none";
+      clearSideActive();
+      history.replaceState(null, "", location.pathname + location.search);
+    }
+
+    window.scrollTo(0, 0);
+  </script>
+</body>
+</html>

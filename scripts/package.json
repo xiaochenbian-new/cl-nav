@@ -1,0 +1,20 @@
+{
+  "name": "scripts",
+  "version": "1.0.0",
+  "description": "",
+  "main": "extract-localstorage-config.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "classic-level": "^3.0.0",
+    "snappy": "^7.4.3"
+  },
+  "allowScripts": {
+    "classic-level@3.0.0": true
+  }
+}

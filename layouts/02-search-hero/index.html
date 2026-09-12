@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>方案 2 · 搜索居中 — CL Nav</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../shared/portal.css" />
+  <style>
+    .hero {
+      text-align: center;
+      padding: 1.75rem 1rem 1.1rem;
+      background: linear-gradient(180deg, #ffffff 0%, #eef1f6 100%);
+      border-bottom: 1px solid var(--line);
+    }
+    .brand {
+      font-weight: 700;
+      font-size: clamp(1.6rem, 3.5vw, 2rem);
+      letter-spacing: -0.03em;
+      margin-bottom: 0.35rem;
+    }
+    .brand span { color: var(--accent); }
+    .tagline {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 1.15rem;
+    }
+    .hero .search-box {
+      max-width: 720px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .hero .hot-tags {
+      justify-content: center;
+      max-width: 720px;
+      margin: 0.7rem auto 0;
+    }
+    .hero-actions {
+      display: flex;
+      justify-content: center;
+      gap: 0.45rem;
+      margin-top: 0.75rem;
+    }
+    .hero-actions button {
+      width: 34px; height: 34px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 10px;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .hero-actions button:hover { color: var(--accent); border-color: #bfdbfe; }
+
+    .shell {
+      display: grid;
+      grid-template-columns: var(--side-w) 1fr;
+      gap: 0.85rem;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 1rem 1rem 2rem;
+      align-items: start;
+    }
+    .side {
+      position: sticky;
+      top: 0.75rem;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 0.4rem 0.25rem;
+    }
+    .main { display: grid; gap: 0.85rem; min-width: 0; }
+    .links-wrap { display: flex; flex-wrap: wrap; gap: 0.25rem 0.15rem; }
+    .pills-wrap { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.85rem;
+    }
+
+    @media (max-width: 860px) {
+      .shell { grid-template-columns: 1fr; }
+      .side { position: static; }
+      .side-menu { flex-direction: row; overflow-x: auto; }
+      .side-menu a { white-space: nowrap; padding: 0.45rem 0.7rem; }
+      .pair { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="back-bar">
+    <a href="../../index.html">← 返回预览首页</a>
+    <span>方案 2 · 搜索居中</span>
+  </div>
+
+  <div class="util-bar">
+    <span id="dateText"></span>
+    <div class="right" id="topUtils"></div>
+  </div>
+
+  <header class="hero">
+    <div class="brand">CL <span>Nav</span></div>
+    <p class="tagline">开发者工具导航 · 多引擎搜索</p>
+    <form class="search-box" id="searchForm" action="#" method="get">
+      <select id="engine" aria-label="搜索引擎"></select>
+      <input id="q" type="search" placeholder="搜一下，效率翻倍…" autocomplete="off" />
+      <button type="submit">搜索</button>
+    </form>
+    <div class="hot-tags" id="hotTags"></div>
+    <div class="hero-actions">
+      <button type="button" title="设置">⚙</button>
+      <button type="button" title="皮肤">◐</button>
+    </div>
+  </header>
+
+  <div class="shell">
+    <aside class="side">
+      <nav class="side-menu" id="sideMenu"></nav>
+    </aside>
+    <div class="main">
+      <section class="card" id="common">
+        <div class="card-h"><span>常用</span><a class="more" href="#">更多</a></div>
+        <div class="links-wrap" id="commonLinks"></div>
+      </section>
+      <section class="card" id="ai">
+        <div class="card-h"><span>AI</span><a class="more" href="#">更多</a></div>
+        <div class="links-wrap" id="aiLinks"></div>
+      </section>
+      <section class="card" id="tools">
+        <div class="card-h"><span>工具箱</span><a class="more" href="#">更多</a></div>
+        <div class="pills-wrap" id="toolPills"></div>
+      </section>
+      <div class="pair">
+        <section class="card" id="mail">
+          <div class="card-h"><span>邮箱</span><a class="more" href="#">更多</a></div>
+          <div class="links-wrap" id="mailLinks"></div>
+        </section>
+        <section class="card" id="cloud">
+          <div class="card-h"><span>云服务</span><a class="more" href="#">更多</a></div>
+          <div class="links-wrap" id="cloudLinks"></div>
+        </section>
+      </div>
+      <section class="card">
+        <div class="card-h"><span>热门资讯</span><a class="more" href="#">更多</a></div>
+        <ul class="news-list" id="hotNews"></ul>
+      </section>
+    </div>
+  </div>
+
+  <script src="../../shared/data.js"></script>
+  <script src="../../shared/portal.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("dateText").textContent = NAV_DATA.dateText;
+      document.getElementById("topUtils").innerHTML = Portal.topUtils();
+      document.getElementById("engine").innerHTML = Portal.engineOptions();
+      document.getElementById("hotTags").innerHTML = Portal.hotTags();
+      document.getElementById("sideMenu").innerHTML = Portal.sideMenu();
+      document.getElementById("commonLinks").innerHTML = Portal.iconLinks(NAV_DATA.common);
+      document.getElementById("aiLinks").innerHTML = Portal.iconLinks(NAV_DATA.ai);
+      document.getElementById("toolPills").innerHTML = Portal.pillTools(NAV_DATA.tools);
+      document.getElementById("mailLinks").innerHTML = Portal.iconLinks(NAV_DATA.mail);
+      document.getElementById("cloudLinks").innerHTML = Portal.iconLinks(NAV_DATA.cloud);
+      document.getElementById("hotNews").innerHTML = Portal.hotNews();
+      Portal.bindSearch("#searchForm", "#engine", "#q");
+    });
+  </script>
+</body>
+</html>

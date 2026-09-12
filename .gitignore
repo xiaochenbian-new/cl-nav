@@ -1,0 +1,16 @@
+# 依赖
+node_modules/
+scripts/node_modules/
+
+# 个人数据转储（勿提交）
+scripts/_yuque_dump/
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 构建/临时产物
+dist-site/
+*.log
