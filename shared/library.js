@@ -34,6 +34,11 @@
       this.renderToolbar();
       this.bind();
       if (window.Portal?.bindTheme) Portal.bindTheme();
+      if (window.LibUploadQueue) {
+        const dock = document.getElementById("libPageUploadDock");
+        if (dock) LibUploadQueue.bindDock(dock);
+      }
+      window.addEventListener("cl-nav-lib-uploaded", () => this.refreshListQuiet());
       try {
         this.items = await LibraryStorage.list();
         this.setStatus(this.items.length ? "" : "云端目录为空，请登录设置上传资源");

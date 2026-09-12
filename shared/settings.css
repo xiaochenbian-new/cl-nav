@@ -965,31 +965,141 @@
 }
 
 .cfg-lib-cats-panel {
-  margin: 0 0 0.85rem;
-  padding: 0.7rem 0.8rem 0.75rem;
+  margin: 0 0 0.55rem;
+  padding: 0.55rem 0.7rem;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg) 55%, var(--panel));
 }
 
-.cfg-lib-cats-head {
+.cfg-lib-cats-line {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.55rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.4rem;
 }
 
-.cfg-lib-cats-head strong {
+.cfg-lib-cats-label {
+  flex: 0 0 auto;
   font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
 }
 
 .cfg-lib-cats {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.cfg-lib-cat-plus {
+  flex: 0 0 auto;
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--accent);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.cfg-lib-cat-plus:hover {
+  background: var(--accent-soft);
+  border-style: solid;
+}
+
+.cfg-lib-cat-composer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex: 1 1 10rem;
+  min-width: 9rem;
+}
+
+.cfg-lib-cat-composer[hidden] {
+  display: none !important;
+}
+
+.cfg-lib-cat-composer input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.32rem 0.5rem;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--panel);
+}
+
+.cfg-lib-cat-composer input:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+.cfg-lib-upload-dock {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--panel));
+}
+
+.cfg-lib-upload-dock[hidden] {
+  display: none !important;
+}
+
+.lib-upload-row {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.lib-upload-row-top {
+  display: flex;
+  align-items: center;
   gap: 0.4rem;
-  margin-bottom: 0.55rem;
-  min-height: 1.8rem;
+  min-width: 0;
+}
+
+.lib-upload-row-top strong {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lib-upload-row-top > span {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.lib-upload-cancel {
+  flex: 0 0 auto;
+  padding: 0.18rem 0.45rem;
+  font-size: 11px;
+  min-height: 0;
+}
+
+.lib-upload-row .cfg-lib-progress {
+  margin: 0;
 }
 
 .cfg-lib-cat-chip {
@@ -1083,28 +1193,4 @@
 .cfg-lib-cat-chip > .cfg-lib-x:disabled {
   opacity: 0.25;
   cursor: not-allowed;
-}
-
-.cfg-lib-cats-add {
-  display: flex;
-  gap: 0.4rem;
-  align-items: center;
-}
-
-.cfg-lib-cats-add input {
-  flex: 1;
-  min-width: 0;
-  box-sizing: border-box;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0.42rem 0.6rem;
-  font: inherit;
-  font-size: 13px;
-  color: var(--ink);
-  background: var(--panel);
-}
-
-.cfg-lib-cats-add input:focus {
-  outline: 2px solid color-mix(in srgb, var(--accent) 28%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
 }

@@ -670,16 +670,10 @@
             <div class="cfg-item-actions">
               <button type="button" class="cfg-btn" id="libAddLinkBtn">外链</button>
               <button type="button" class="cfg-btn primary" id="ghUploadBtn">上传到 Release</button>
-              <input id="ghFileInput" type="file" hidden />
+              <input id="ghFileInput" type="file" multiple hidden />
             </div>
           </div>
           <p class="cfg-status" id="libAdminStatus"></p>
-          <div class="cfg-lib-progress" id="libUploadProgress" hidden>
-            <div class="cfg-lib-progress-track" aria-hidden="true">
-              <div class="cfg-lib-progress-bar" id="libUploadBar"></div>
-            </div>
-            <span class="cfg-lib-progress-text" id="libUploadPct">0%</span>
-          </div>
 
           <details class="cfg-lib-config" id="libConfigPanel">
             <summary>配置管理</summary>
@@ -703,23 +697,24 @@
                 <div class="cfg-lib-actions">
                   <button type="button" class="cfg-btn" id="ghSavePrefs">保存</button>
                   <button type="button" class="cfg-btn" id="ghTestBtn">测试连接</button>
-                  <span class="settings-tip">xiaochenbian-new / cl-nav-file · &lt;95MB</span>
+                  <span class="settings-tip">xiaochenbian-new / cl-nav-file · &lt;95MB · 最多同时 3 个</span>
                 </div>
               </section>
             </div>
           </details>
 
           <section class="cfg-lib-cats-panel">
-            <div class="cfg-lib-cats-head">
-              <strong>资源分类</strong>
-              <span class="settings-tip">拖动手柄排序 · 点击名称重命名 · 随备份同步</span>
-            </div>
-            <div class="cfg-lib-cats" id="libCatChips"></div>
-            <div class="cfg-lib-cats-add">
-              <input type="text" id="libCatNewName" placeholder="新分类名称" autocomplete="off" />
-              <button type="button" class="cfg-btn" id="libCatAdd">添加</button>
+            <div class="cfg-lib-cats-line">
+              <strong class="cfg-lib-cats-label">资源分类：</strong>
+              <div class="cfg-lib-cats" id="libCatChips"></div>
+              <button type="button" class="cfg-lib-cat-plus" id="libCatAddToggle" title="添加分类">+</button>
+              <span class="cfg-lib-cat-composer" id="libCatComposer" hidden>
+                <input type="text" id="libCatNewName" placeholder="新分类名称" maxlength="40" autocomplete="off" />
+                <button type="button" class="cfg-btn" id="libCatAdd">添加</button>
+              </span>
             </div>
           </section>
+          <div class="cfg-lib-upload-dock" id="libUploadDock" hidden></div>
 
           <div class="cfg-lib-list-head">
             <strong>已上传资源</strong>
@@ -1059,25 +1054,8 @@
         el.className = "cfg-status" + (kind ? " " + kind : "");
       };
 
-      const setUploadProgress = (ratio, label) => {
-        const wrap = root.querySelector("#libUploadProgress");
-        const bar = root.querySelector("#libUploadBar");
-        const pct = root.querySelector("#libUploadPct");
-        if (!wrap || !bar || !pct) return;
-        const r = Math.max(0, Math.min(1, Number(ratio) || 0));
-        wrap.hidden = false;
-        wrap.classList.toggle("is-indeterminate", r >= 0.96 && r < 1);
-        bar.style.width = Math.round(r * 100) + "%";
-        pct.textContent = label || Math.round(r * 100) + "%";
-      };
-
-      const hideUploadProgress = () => {
-        const wrap = root.querySelector("#libUploadProgress");
-        const bar = root.querySelector("#libUploadBar");
-        if (wrap) wrap.hidden = true;
-        if (bar) bar.style.width = "0%";
-        wrap?.classList.remove("is-indeterminate");
-      };
+      const dock = root.querySelector("#libUploadDock");
+      if (dock && window.LibUploadQueue) LibUploadQueue.bindDock(dock);
 
       root.querySelector("#cfgLogout")?.addEventListener("click", () => {
         this.logout();
@@ -1131,46 +1109,35 @@
         root.querySelector("#ghFileInput")?.click();
       });
 
-      root.querySelector("#ghFileInput")?.addEventListener("change", async (e) => {
-        const file = e.target.files && e.target.files[0];
+      root.querySelector("#ghFileInput")?.addEventListener("change", (e) => {
+        const files = e.target.files ? [...e.target.files] : [];
         e.target.value = "";
-        if (!file || !window.LibraryStorage?.uploadToGitHub) return;
+        if (!files.length || !window.LibUploadQueue) return;
         this.activeTab = "library";
-        const uploadBtn = root.querySelector("#ghUploadBtn");
-        if (uploadBtn) uploadBtn.disabled = true;
-        setLibStatus("正在上传「" + file.name + "」…");
-        setUploadProgress(0, "0%");
+        syncGhFields();
         try {
-          const item = await LibraryStorage.uploadToGitHub(
-            file,
-            {
-              title: file.name,
-              desc: "",
-              category: "other",
-            },
-            (info) => {
-              if (info.phase === "upload") {
-                const pct = Math.round((info.ratio || 0) * 100);
-                setUploadProgress(info.ratio, pct + "%");
-                setLibStatus("正在上传「" + file.name + "」… " + pct + "%");
-              } else if (info.phase === "server") {
-                setUploadProgress(0.97, "处理中");
-                setLibStatus("文件已传至服务器，正在创建 GitHub Release…");
-              } else if (info.phase === "done") {
-                setUploadProgress(1, "100%");
-              }
-            }
+          LibUploadQueue.enqueue(files, { category: "other" });
+          const n = files.length;
+          setLibStatus(
+            n > 1
+              ? `已加入 ${n} 个上传任务（最多同时 ${LibUploadQueue.MAX_CONCURRENT} 个）`
+              : `已开始上传「${files[0].name}」`,
+            "ok"
           );
-          setLibStatus("上传成功：" + (item?.title || file.name) + " —— 可点「编辑」补充说明与多渠道外链", "ok");
-          this.libEditingId = item?.id || "";
-          await this.renderLibraryAdmin(root);
         } catch (err) {
-          setLibStatus(err.message || "GitHub 上传失败", "err");
-        } finally {
-          if (uploadBtn) uploadBtn.disabled = false;
-          setTimeout(() => hideUploadProgress(), 800);
+          setLibStatus(err.message || "无法开始上传", "err");
         }
       });
+
+      const onUploaded = async () => {
+        if (this.activeTab === "library") {
+          try {
+            await this.renderLibraryAdmin(root);
+          } catch (_) {}
+        }
+        if (window.LibraryUI?.refreshListQuiet) LibraryUI.refreshListQuiet();
+      };
+      window.addEventListener("cl-nav-lib-uploaded", onUploaded);
 
       root.querySelector("#libAddLinkBtn")?.addEventListener("click", async () => {
         if (!window.LibraryStorage?.addLink) return;
@@ -1198,11 +1165,46 @@
         this.renderLibraryAdmin(root);
       });
 
+      const hideCatComposer = () => {
+        const composer = root.querySelector("#libCatComposer");
+        const plus = root.querySelector("#libCatAddToggle");
+        if (composer) composer.hidden = true;
+        if (plus) plus.hidden = false;
+        const input = root.querySelector("#libCatNewName");
+        if (input) input.value = "";
+      };
+
+      const showCatComposer = () => {
+        const composer = root.querySelector("#libCatComposer");
+        const plus = root.querySelector("#libCatAddToggle");
+        if (composer) composer.hidden = false;
+        if (plus) plus.hidden = true;
+        const input = root.querySelector("#libCatNewName");
+        input?.focus();
+      };
+
+      root.querySelector("#libCatAddToggle")?.addEventListener("click", () => {
+        this.activeTab = "library";
+        showCatComposer();
+      });
+
+      root.querySelector("#libCatNewName")?.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          hideCatComposer();
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          root.querySelector("#libCatAdd")?.click();
+        }
+      });
+
       root.querySelector("#libCatAdd")?.addEventListener("click", async () => {
         if (!window.LibraryStorage?.saveCategories) return;
         const name = String(root.querySelector("#libCatNewName")?.value || "").trim();
         if (!name) {
           setLibStatus("请填写新分类名称", "err");
+          root.querySelector("#libCatNewName")?.focus();
           return;
         }
         this.activeTab = "library";
@@ -1212,8 +1214,7 @@
         setLibStatus("正在添加分类…");
         try {
           await LibraryStorage.saveCategories(cats);
-          const input = root.querySelector("#libCatNewName");
-          if (input) input.value = "";
+          hideCatComposer();
           setLibStatus("已添加分类：" + name, "ok");
           await this.renderLibraryAdmin(root);
           if (window.LibraryUI?.refreshListQuiet) LibraryUI.refreshListQuiet();

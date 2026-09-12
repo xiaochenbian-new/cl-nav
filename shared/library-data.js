@@ -434,14 +434,23 @@
     /** 上传到 GitHub Releases，并自动写入资源库目录
      * @param {File} file
      * @param {object} meta
-     * @param {(info: { ratio: number, phase: string, loaded?: number, total?: number }) => void} [onProgress]
+     * @param {Function|{ onProgress?: Function, signal?: AbortSignal }} [onProgressOrOpts]
      */
-    async uploadToGitHub(file, meta = {}, onProgress) {
+    async uploadToGitHub(file, meta = {}, onProgressOrOpts) {
       if (!file) throw new Error("未选择文件");
       if (!window.NavAuth?.isLoggedIn?.()) throw new Error("请先登录后再上传");
       if (typeof location !== "undefined" && location.protocol === "file:" && !window.ClNavApi?.origin?.()) {
         throw new Error("请用 Cloudflare / GitHub Pages 打开后再上传");
       }
+
+      const opts =
+        typeof onProgressOrOpts === "function"
+          ? { onProgress: onProgressOrOpts }
+          : onProgressOrOpts && typeof onProgressOrOpts === "object"
+            ? onProgressOrOpts
+            : {};
+      const onProgress = opts.onProgress;
+      const signal = opts.signal;
 
       const gh = { ...loadGhPrefs(), ...(meta.github || {}) };
       gh.owner = normalizeGhPart(gh.owner, "owner");
@@ -474,6 +483,10 @@
         } catch (_) {}
       };
 
+      const cancelledErr = () => Object.assign(new Error("已取消上传"), { cancelled: true });
+
+      if (signal?.aborted) throw cancelledErr();
+
       notify({ ratio: 0, phase: "upload", loaded: 0, total: file.size || 0 });
 
       const j = await new Promise((resolve, reject) => {
@@ -489,6 +502,17 @@
           } catch (_) {}
         });
 
+        const onAbort = () => {
+          try {
+            xhr.abort();
+          } catch (_) {}
+        };
+        if (signal) signal.addEventListener("abort", onAbort);
+
+        const cleanup = () => {
+          if (signal) signal.removeEventListener("abort", onAbort);
+        };
+
         xhr.upload.onprogress = (e) => {
           if (!e.lengthComputable) {
             notify({ ratio: 0.05, phase: "upload" });
@@ -502,10 +526,21 @@
           notify({ ratio: 0.96, phase: "server", loaded: file.size, total: file.size });
         };
 
-        xhr.onerror = () => reject(new Error("无法连接 " + apiUrl(API_GH)));
-        xhr.ontimeout = () => reject(new Error("上传超时，请稍后重试或换较小文件"));
+        xhr.onabort = () => {
+          cleanup();
+          reject(cancelledErr());
+        };
+        xhr.onerror = () => {
+          cleanup();
+          reject(new Error("无法连接 " + apiUrl(API_GH)));
+        };
+        xhr.ontimeout = () => {
+          cleanup();
+          reject(new Error("上传超时，请稍后重试或换较小文件"));
+        };
 
         xhr.onload = () => {
+          cleanup();
           const ct = (xhr.getResponseHeader("content-type") || "").toLowerCase();
           if (ct.includes("text/html")) {
             reject(new Error("接口未部署：请确认 Cloudflare 已部署 functions/api/library-github.js"));
@@ -571,6 +606,247 @@
       LIBRARY_DATA.items = (LIBRARY_DATA.items || []).filter((x) => !gone.has(x.id));
       markSyncDirty();
       return j.deleted || list.length;
+    },
+  };
+
+  function escUpload(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  /** 多文件上传队列：最多同时 3 个，可取消；关闭设置后进度仍可渲染 */
+  window.LibUploadQueue = {
+    MAX_CONCURRENT: 3,
+    jobs: [],
+    _subs: new Set(),
+    _running: 0,
+    _pumping: false,
+
+    subscribe(fn) {
+      if (typeof fn !== "function") return () => {};
+      this._subs.add(fn);
+      try {
+        fn(this.visibleJobs());
+      } catch (_) {}
+      return () => this._subs.delete(fn);
+    },
+
+    notify() {
+      const snap = this.visibleJobs();
+      this._subs.forEach((fn) => {
+        try {
+          fn(snap);
+        } catch (_) {}
+      });
+    },
+
+    visibleJobs() {
+      return this.jobs.filter((j) => j.status !== "gone");
+    },
+
+    hasActive() {
+      return this.jobs.some((j) => j.status === "queued" || j.status === "uploading" || j.status === "server");
+    },
+
+    enqueue(files, meta = {}) {
+      const list = [...(files || [])].filter(Boolean);
+      if (!list.length) return [];
+      if (!window.NavAuth?.isLoggedIn?.()) throw new Error("请先登录后再上传");
+      const ids = [];
+      for (const file of list) {
+        const id = "up_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
+        this.jobs.push({
+          id,
+          file,
+          name: file.name || "未命名文件",
+          status: "queued",
+          ratio: 0,
+          message: "排队中",
+          error: "",
+          controller: null,
+          item: null,
+          meta: { ...meta },
+        });
+        ids.push(id);
+      }
+      this.notify();
+      this.pump();
+      return ids;
+    },
+
+    cancel(id) {
+      const job = this.jobs.find((j) => j.id === id);
+      if (!job) return;
+      if (job.status === "queued") {
+        job.status = "cancelled";
+        job.message = "已取消";
+        this._forgetLater(job);
+        this.notify();
+        return;
+      }
+      if (job.controller) {
+        try {
+          job.controller.abort();
+        } catch (_) {}
+      } else {
+        job.status = "cancelled";
+        job.message = "已取消";
+        this._forgetLater(job);
+        this.notify();
+      }
+    },
+
+    _forgetLater(job, ms = 2200) {
+      window.setTimeout(() => {
+        job.status = "gone";
+        this.jobs = this.jobs.filter((j) => j.status !== "gone");
+        this.notify();
+      }, ms);
+    },
+
+    pump() {
+      if (this._pumping) return;
+      this._pumping = true;
+      try {
+        while (this._running < this.MAX_CONCURRENT) {
+          const next = this.jobs.find((j) => j.status === "queued");
+          if (!next) break;
+          this._start(next);
+        }
+      } finally {
+        this._pumping = false;
+      }
+    },
+
+    async _start(job) {
+      this._running += 1;
+      job.status = "uploading";
+      job.message = "上传中 0%";
+      job.ratio = 0;
+      const ac = new AbortController();
+      job.controller = ac;
+      this.notify();
+      try {
+        const item = await LibraryStorage.uploadToGitHub(
+          job.file,
+          {
+            title: job.meta.title || job.file.name,
+            desc: job.meta.desc || "",
+            category: job.meta.category || "other",
+          },
+          {
+            signal: ac.signal,
+            onProgress: (info) => {
+              if (job.status === "cancelled") return;
+              if (info.phase === "upload") {
+                job.status = "uploading";
+                job.ratio = info.ratio || 0;
+                job.message = "上传中 " + Math.round(job.ratio * 100) + "%";
+              } else if (info.phase === "server") {
+                job.status = "server";
+                job.ratio = 0.97;
+                job.message = "创建 Release…";
+              } else if (info.phase === "done") {
+                job.ratio = 1;
+                job.message = "完成";
+              }
+              this.notify();
+            },
+          }
+        );
+        job.item = item;
+        job.status = "done";
+        job.ratio = 1;
+        job.message = "上传成功";
+        this._forgetLater(job, 1800);
+        try {
+          window.dispatchEvent(new CustomEvent("cl-nav-lib-uploaded", { detail: { item, jobId: job.id } }));
+        } catch (_) {}
+      } catch (err) {
+        if (err?.cancelled || ac.signal.aborted) {
+          job.status = "cancelled";
+          job.message = "已取消";
+        } else {
+          job.status = "error";
+          job.error = err?.message || "上传失败";
+          job.message = job.error;
+        }
+        this._forgetLater(job, job.status === "error" ? 4500 : 1800);
+      } finally {
+        job.controller = null;
+        this._running = Math.max(0, this._running - 1);
+        this.notify();
+        this.pump();
+      }
+    },
+
+    renderDock(container) {
+      if (!container) return;
+      const jobs = this.visibleJobs();
+      if (!jobs.length) {
+        container.hidden = true;
+        container.innerHTML = "";
+        return;
+      }
+      container.hidden = false;
+      container.innerHTML = jobs
+        .map((j) => {
+          const pct = Math.round((j.ratio || 0) * 100);
+          const canCancel = j.status === "queued" || j.status === "uploading" || j.status === "server";
+          const ind = j.status === "server" ? " is-indeterminate" : "";
+          return `
+          <div class="lib-upload-row" data-upload-id="${escUpload(j.id)}">
+            <div class="lib-upload-row-top">
+              <strong title="${escUpload(j.name)}">${escUpload(j.name)}</strong>
+              <span>${escUpload(j.message)}</span>
+              ${
+                canCancel
+                  ? `<button type="button" class="cfg-btn lib-upload-cancel" data-upload-cancel="${escUpload(
+                      j.id
+                    )}">取消</button>`
+                  : ""
+              }
+            </div>
+            <div class="cfg-lib-progress${ind}">
+              <div class="cfg-lib-progress-track" aria-hidden="true">
+                <div class="cfg-lib-progress-bar" style="width:${j.status === "server" ? 40 : pct}%"></div>
+              </div>
+              <span class="cfg-lib-progress-text">${j.status === "server" ? "…" : pct + "%"}</span>
+            </div>
+          </div>`;
+        })
+        .join("");
+    },
+
+    bindDock(container) {
+      if (!container) return;
+      if (!this._docks) this._docks = new Set();
+      this._docks.add(container);
+      if (container.dataset.uploadBound !== "1") {
+        container.dataset.uploadBound = "1";
+        container.addEventListener("click", (e) => {
+          const btn = e.target.closest("[data-upload-cancel]");
+          if (!btn) return;
+          this.cancel(btn.dataset.uploadCancel);
+        });
+      }
+      if (!this._dockUiBound) {
+        this._dockUiBound = true;
+        this.subscribe(() => {
+          [...(this._docks || [])].forEach((el) => {
+            if (!el.isConnected) {
+              this._docks.delete(el);
+              return;
+            }
+            this.renderDock(el);
+          });
+        });
+      } else {
+        this.renderDock(container);
+      }
     },
   };
 })();
