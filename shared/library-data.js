@@ -430,8 +430,12 @@
       return j;
     },
 
-    /** 上传到 GitHub Releases，并自动写入资源库目录 */
-    async uploadToGitHub(file, meta = {}) {
+    /** 上传到 GitHub Releases，并自动写入资源库目录
+     * @param {File} file
+     * @param {object} meta
+     * @param {(info: { ratio: number, phase: string, loaded?: number, total?: number }) => void} [onProgress]
+     */
+    async uploadToGitHub(file, meta = {}, onProgress) {
       if (!file) throw new Error("未选择文件");
       if (!window.NavAuth?.isLoggedIn?.()) throw new Error("请先登录后再上传");
       if (typeof location !== "undefined" && location.protocol === "file:") {
@@ -463,25 +467,70 @@
       fd.append("ghRepo", gh.repo);
       fd.append("ghToken", gh.token);
 
-      let res;
-      try {
-        res = await fetch(API_GH, {
-          method: "POST",
-          headers: authHeaders(false),
-          body: fd,
-          cache: "no-store",
-        });
-      } catch (err) {
-        throw new Error("无法连接 /api/library-github");
-      }
+      const notify = (info) => {
+        try {
+          if (typeof onProgress === "function") onProgress(info);
+        } catch (_) {}
+      };
 
-      const ct = (res.headers.get("content-type") || "").toLowerCase();
-      if (ct.includes("text/html")) {
-        throw new Error("接口未部署：请确认 Cloudflare 已部署 functions/api/library-github.js");
-      }
-      const j = await res.json().catch(() => ({}));
-      if (res.status === 401) throw new Error(j.error || "未授权，请重新登录");
-      if (!res.ok) throw new Error(j.error || "GitHub 上传失败 HTTP " + res.status);
+      notify({ ratio: 0, phase: "upload", loaded: 0, total: file.size || 0 });
+
+      const j = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", API_GH);
+        xhr.responseType = "text";
+        xhr.timeout = 15 * 60 * 1000;
+
+        const headers = authHeaders(false);
+        Object.keys(headers).forEach((k) => {
+          try {
+            xhr.setRequestHeader(k, headers[k]);
+          } catch (_) {}
+        });
+
+        xhr.upload.onprogress = (e) => {
+          if (!e.lengthComputable) {
+            notify({ ratio: 0.05, phase: "upload" });
+            return;
+          }
+          const ratio = Math.max(0, Math.min(0.95, e.loaded / e.total));
+          notify({ ratio, phase: "upload", loaded: e.loaded, total: e.total });
+        };
+
+        xhr.upload.onload = () => {
+          notify({ ratio: 0.96, phase: "server", loaded: file.size, total: file.size });
+        };
+
+        xhr.onerror = () => reject(new Error("无法连接 /api/library-github"));
+        xhr.ontimeout = () => reject(new Error("上传超时，请稍后重试或换较小文件"));
+
+        xhr.onload = () => {
+          const ct = (xhr.getResponseHeader("content-type") || "").toLowerCase();
+          if (ct.includes("text/html")) {
+            reject(new Error("接口未部署：请确认 Cloudflare 已部署 functions/api/library-github.js"));
+            return;
+          }
+          let data = {};
+          try {
+            data = JSON.parse(xhr.responseText || "{}");
+          } catch (_) {
+            data = {};
+          }
+          if (xhr.status === 401) {
+            reject(new Error(data.error || "未授权，请重新登录"));
+            return;
+          }
+          if (xhr.status < 200 || xhr.status >= 300) {
+            reject(new Error(data.error || "GitHub 上传失败 HTTP " + xhr.status));
+            return;
+          }
+          notify({ ratio: 1, phase: "done" });
+          resolve(data);
+        };
+
+        xhr.send(fd);
+      });
+
       if (j.item) {
         LIBRARY_DATA.items = LIBRARY_DATA.items || [];
         LIBRARY_DATA.items.unshift(j.item);

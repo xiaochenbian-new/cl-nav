@@ -172,10 +172,34 @@
     });
   }
 
+  /** Drafts kept when dialogs are dismissed by overlay / Escape (not Cancel / success). */
+  const dialogDrafts = {
+    linkAdd: null,
+    libResource: null,
+  };
+
+  function readLinkDialogValues(overlay) {
+    return {
+      title: String(overlay.querySelector("#cfgDlgTitle")?.value || "").trim(),
+      url: String(overlay.querySelector("#cfgDlgUrl")?.value || "").trim(),
+      desc: String(overlay.querySelector("#cfgDlgDesc")?.value || "").trim(),
+    };
+  }
+
+  function isLinkDraftEmpty(d) {
+    return !d || !(d.title || d.url || d.desc);
+  }
+
   function openLinkDialog(initial = {}, titleText = "添加网站") {
     return new Promise((resolve) => {
       const old = document.getElementById("cfgLinkDialog");
       if (old) old.remove();
+
+      const isAdd = !initial || (!initial.url && !initial.title);
+      const seed =
+        isAdd && dialogDrafts.linkAdd && !isLinkDraftEmpty(dialogDrafts.linkAdd)
+          ? { ...dialogDrafts.linkAdd }
+          : initial || {};
 
       const overlay = document.createElement("div");
       overlay.id = "cfgLinkDialog";
@@ -185,15 +209,15 @@
           <h3 id="cfgDialogTitle">${esc(titleText)}</h3>
           <label class="cfg-field">
             <span>名称</span>
-            <input type="text" id="cfgDlgTitle" placeholder="如 GitHub" value="${esc(initial.title || "")}" autocomplete="off" />
+            <input type="text" id="cfgDlgTitle" placeholder="如 GitHub" value="${esc(seed.title || "")}" autocomplete="off" />
           </label>
           <label class="cfg-field">
             <span>网站地址</span>
-            <input type="url" id="cfgDlgUrl" placeholder="https://example.com" value="${esc(initial.url || "")}" autocomplete="off" />
+            <input type="url" id="cfgDlgUrl" placeholder="https://example.com" value="${esc(seed.url || "")}" autocomplete="off" />
           </label>
           <label class="cfg-field">
             <span>备注</span>
-            <input type="text" id="cfgDlgDesc" placeholder="一句话说明（可选）" value="${esc(initial.desc || "")}" autocomplete="off" />
+            <input type="text" id="cfgDlgDesc" placeholder="一句话说明（可选）" value="${esc(seed.desc || "")}" autocomplete="off" />
           </label>
           <p class="cfg-dialog-err" id="cfgDlgErr" hidden></p>
           <div class="cfg-dialog-actions">
@@ -209,7 +233,14 @@
       const titleInput = overlay.querySelector("#cfgDlgTitle");
       const errEl = overlay.querySelector("#cfgDlgErr");
 
-      const close = (result) => {
+      const close = (result, { keepDraft = false, clearDraft = false } = {}) => {
+        if (isAdd) {
+          if (clearDraft) dialogDrafts.linkAdd = null;
+          else if (keepDraft) {
+            const vals = readLinkDialogValues(overlay);
+            dialogDrafts.linkAdd = isLinkDraftEmpty(vals) ? null : vals;
+          }
+        }
         overlay.remove();
         document.removeEventListener("keydown", onKey);
         resolve(result);
@@ -227,11 +258,11 @@
         const desc = (descInput.value || "").trim();
         let title = (titleInput.value || "").trim();
         if (!title) title = domainFromUrl(url) || url;
-        close(NavStore.normalizeLink({ title, url, desc }));
+        close(NavStore.normalizeLink({ title, url, desc }), { clearDraft: true });
       };
 
       const onKey = (e) => {
-        if (e.key === "Escape") close(null);
+        if (e.key === "Escape") close(null, { keepDraft: true });
         if (e.key === "Enter" && e.target.tagName === "INPUT") {
           e.preventDefault();
           submit();
@@ -240,13 +271,15 @@
       document.addEventListener("keydown", onKey);
 
       overlay.addEventListener("click", (e) => {
-        if (e.target === overlay) close(null);
+        if (e.target === overlay) close(null, { keepDraft: true });
       });
-      overlay.querySelector("#cfgDlgCancel").addEventListener("click", () => close(null));
+      overlay.querySelector("#cfgDlgCancel").addEventListener("click", () =>
+        close(null, { clearDraft: true })
+      );
       overlay.querySelector("#cfgDlgOk").addEventListener("click", submit);
 
       titleInput.focus();
-      titleInput.select();
+      if (!seed.title && !seed.url) titleInput.select();
     });
   }
 
@@ -294,6 +327,12 @@
   function openLibResourceDialog() {
     return new Promise((resolve) => {
       document.getElementById("cfgLibResourceDialog")?.remove();
+      const draft = dialogDrafts.libResource;
+      const seed = draft || { title: "", category: "other", desc: "", links: [{ channel: "direct", url: "", label: "" }] };
+      const linkRows = (Array.isArray(seed.links) && seed.links.length ? seed.links : [{ channel: "direct", url: "", label: "" }])
+        .map((l) => linkRowHtml(l))
+        .join("");
+
       const overlay = document.createElement("div");
       overlay.id = "cfgLibResourceDialog";
       overlay.className = "cfg-dialog-overlay";
@@ -301,16 +340,20 @@
         <div class="cfg-dialog cfg-dialog-wide" role="dialog" aria-modal="true" aria-labelledby="cfgLibDlgTitle">
           <h3 id="cfgLibDlgTitle">添加外链资源</h3>
           <div class="cfg-lib-form">
-            <label><span>名称</span><input type="text" id="cfgLibDlgName" placeholder="例如 JDK 安装包" autocomplete="off" /></label>
-            <label><span>分类</span><select id="cfgLibDlgCat">${categoryOptionsHtml("other")}</select></label>
-            <label class="cfg-lib-span2"><span>说明</span><textarea id="cfgLibDlgDesc" rows="2" placeholder="可选，展示在资源库页面"></textarea></label>
+            <label><span>名称</span><input type="text" id="cfgLibDlgName" placeholder="例如 JDK 安装包" value="${esc(
+              seed.title || ""
+            )}" autocomplete="off" /></label>
+            <label><span>分类</span><select id="cfgLibDlgCat">${categoryOptionsHtml(seed.category || "other")}</select></label>
+            <label class="cfg-lib-span2"><span>说明</span><textarea id="cfgLibDlgDesc" rows="2" placeholder="可选，展示在资源库页面">${esc(
+              seed.desc || ""
+            )}</textarea></label>
           </div>
           <div class="cfg-lib-links cfg-lib-dlg-links">
             <div class="cfg-lib-links-head">
               <strong>下载渠道</strong>
               <button type="button" class="cfg-btn" id="cfgLibDlgAddLink">＋ 添加</button>
             </div>
-            <div class="cfg-lib-link-list" id="cfgLibDlgLinkList">${linkRowHtml()}</div>
+            <div class="cfg-lib-link-list" id="cfgLibDlgLinkList">${linkRows}</div>
           </div>
           <p class="cfg-dialog-err" id="cfgLibDlgErr" hidden></p>
           <div class="cfg-dialog-actions">
@@ -324,18 +367,36 @@
       const errEl = overlay.querySelector("#cfgLibDlgErr");
       const nameInput = overlay.querySelector("#cfgLibDlgName");
 
-      const close = (result) => {
-        overlay.remove();
-        document.removeEventListener("keydown", onKey);
-        resolve(result);
-      };
-
       const readLinks = () =>
         [...list.querySelectorAll("[data-link-row]")].map((row) => ({
           channel: row.querySelector("[data-link-channel]")?.value || "other",
           url: String(row.querySelector("[data-link-url]")?.value || "").trim(),
           label: String(row.querySelector("[data-link-label]")?.value || "").trim(),
         }));
+
+      const readDraft = () => ({
+        title: String(nameInput.value || "").trim(),
+        category: overlay.querySelector("#cfgLibDlgCat")?.value || "other",
+        desc: String(overlay.querySelector("#cfgLibDlgDesc")?.value || "").trim(),
+        links: readLinks(),
+      });
+
+      const isDraftEmpty = (d) => {
+        if (!d) return true;
+        const hasLink = (d.links || []).some((l) => l.url || l.label);
+        return !(d.title || d.desc || hasLink);
+      };
+
+      const close = (result, { keepDraft = false, clearDraft = false } = {}) => {
+        if (clearDraft) dialogDrafts.libResource = null;
+        else if (keepDraft) {
+          const vals = readDraft();
+          dialogDrafts.libResource = isDraftEmpty(vals) ? null : vals;
+        }
+        overlay.remove();
+        document.removeEventListener("keydown", onKey);
+        resolve(result);
+      };
 
       const submit = () => {
         const title = String(nameInput.value || "").trim();
@@ -347,25 +408,30 @@
           errEl.textContent = "请至少填写一个以 http(s):// 开头的下载地址";
           return;
         }
-        close({
-          title: title || "未命名资源",
-          category,
-          desc,
-          links,
-          downloadUrl: links[0].url,
-          channel: links[0].channel,
-        });
+        close(
+          {
+            title: title || "未命名资源",
+            category,
+            desc,
+            links,
+            downloadUrl: links[0].url,
+            channel: links[0].channel,
+          },
+          { clearDraft: true }
+        );
       };
 
       const onKey = (e) => {
-        if (e.key === "Escape") close(null);
+        if (e.key === "Escape") close(null, { keepDraft: true });
       };
       document.addEventListener("keydown", onKey);
 
       overlay.addEventListener("click", (e) => {
-        if (e.target === overlay) close(null);
+        if (e.target === overlay) close(null, { keepDraft: true });
       });
-      overlay.querySelector("#cfgLibDlgCancel").addEventListener("click", () => close(null));
+      overlay.querySelector("#cfgLibDlgCancel").addEventListener("click", () =>
+        close(null, { clearDraft: true })
+      );
       overlay.querySelector("#cfgLibDlgOk").addEventListener("click", submit);
       overlay.querySelector("#cfgLibDlgAddLink").addEventListener("click", () => {
         list.insertAdjacentHTML("beforeend", linkRowHtml());
@@ -398,7 +464,11 @@
         const panel = document.getElementById("settingsPanel");
         if (!panel) return;
         panel.hidden = false;
-        this.render();
+        const root = document.getElementById("settingsBody");
+        const hasUi = !!(root && root.querySelector(".cfg-tabs"));
+        // 再次打开时保留未保存的输入，避免整页重绘清空
+        if (!hasUi || opts?.force) this.render();
+        else this.setTab(this.activeTab);
       };
       if (window.NavAuth?.requireLogin) {
         NavAuth.requireLogin(go);
@@ -410,13 +480,37 @@
     close() {
       const panel = document.getElementById("settingsPanel");
       if (panel) panel.hidden = true;
-      document.getElementById("cfgLinkDialog")?.remove();
-      document.getElementById("cfgLibResourceDialog")?.remove();
+      // 点遮罩关闭设置时，若子弹窗仍开着也一并收起并保留草稿
+      const linkDlg = document.getElementById("cfgLinkDialog");
+      if (linkDlg) {
+        const vals = readLinkDialogValues(linkDlg);
+        if (!isLinkDraftEmpty(vals)) dialogDrafts.linkAdd = vals;
+        linkDlg.remove();
+      }
+      const libDlg = document.getElementById("cfgLibResourceDialog");
+      if (libDlg) {
+        const name = String(libDlg.querySelector("#cfgLibDlgName")?.value || "").trim();
+        const category = libDlg.querySelector("#cfgLibDlgCat")?.value || "other";
+        const desc = String(libDlg.querySelector("#cfgLibDlgDesc")?.value || "").trim();
+        const links = [...libDlg.querySelectorAll("[data-link-row]")].map((row) => ({
+          channel: row.querySelector("[data-link-channel]")?.value || "other",
+          url: String(row.querySelector("[data-link-url]")?.value || "").trim(),
+          label: String(row.querySelector("[data-link-label]")?.value || "").trim(),
+        }));
+        if (name || desc || links.some((l) => l.url || l.label)) {
+          dialogDrafts.libResource = { title: name, category, desc, links };
+        }
+        libDlg.remove();
+      }
     },
 
     logout() {
       if (window.NavAuth?.logout) NavAuth.logout();
       this.close();
+      dialogDrafts.linkAdd = null;
+      dialogDrafts.libResource = null;
+      const root = document.getElementById("settingsBody");
+      if (root) root.innerHTML = "";
     },
 
     setTab(tab) {
@@ -580,6 +674,12 @@
             </div>
           </div>
           <p class="cfg-status" id="libAdminStatus"></p>
+          <div class="cfg-lib-progress" id="libUploadProgress" hidden>
+            <div class="cfg-lib-progress-track" aria-hidden="true">
+              <div class="cfg-lib-progress-bar" id="libUploadBar"></div>
+            </div>
+            <span class="cfg-lib-progress-text" id="libUploadPct">0%</span>
+          </div>
 
           <details class="cfg-lib-config" id="libConfigPanel">
             <summary>配置管理</summary>
@@ -959,6 +1059,26 @@
         el.className = "cfg-status" + (kind ? " " + kind : "");
       };
 
+      const setUploadProgress = (ratio, label) => {
+        const wrap = root.querySelector("#libUploadProgress");
+        const bar = root.querySelector("#libUploadBar");
+        const pct = root.querySelector("#libUploadPct");
+        if (!wrap || !bar || !pct) return;
+        const r = Math.max(0, Math.min(1, Number(ratio) || 0));
+        wrap.hidden = false;
+        wrap.classList.toggle("is-indeterminate", r >= 0.96 && r < 1);
+        bar.style.width = Math.round(r * 100) + "%";
+        pct.textContent = label || Math.round(r * 100) + "%";
+      };
+
+      const hideUploadProgress = () => {
+        const wrap = root.querySelector("#libUploadProgress");
+        const bar = root.querySelector("#libUploadBar");
+        if (wrap) wrap.hidden = true;
+        if (bar) bar.style.width = "0%";
+        wrap?.classList.remove("is-indeterminate");
+      };
+
       root.querySelector("#cfgLogout")?.addEventListener("click", () => {
         this.logout();
       });
@@ -1016,18 +1136,39 @@
         e.target.value = "";
         if (!file || !window.LibraryStorage?.uploadToGitHub) return;
         this.activeTab = "library";
-        setLibStatus("正在上传到 GitHub Releases（较大文件可能需 1～2 分钟）…");
+        const uploadBtn = root.querySelector("#ghUploadBtn");
+        if (uploadBtn) uploadBtn.disabled = true;
+        setLibStatus("正在上传「" + file.name + "」…");
+        setUploadProgress(0, "0%");
         try {
-          const item = await LibraryStorage.uploadToGitHub(file, {
-            title: file.name,
-            desc: "",
-            category: "other",
-          });
+          const item = await LibraryStorage.uploadToGitHub(
+            file,
+            {
+              title: file.name,
+              desc: "",
+              category: "other",
+            },
+            (info) => {
+              if (info.phase === "upload") {
+                const pct = Math.round((info.ratio || 0) * 100);
+                setUploadProgress(info.ratio, pct + "%");
+                setLibStatus("正在上传「" + file.name + "」… " + pct + "%");
+              } else if (info.phase === "server") {
+                setUploadProgress(0.97, "处理中");
+                setLibStatus("文件已传至服务器，正在创建 GitHub Release…");
+              } else if (info.phase === "done") {
+                setUploadProgress(1, "100%");
+              }
+            }
+          );
           setLibStatus("上传成功：" + (item?.title || file.name) + " —— 可点「编辑」补充说明与多渠道外链", "ok");
           this.libEditingId = item?.id || "";
           await this.renderLibraryAdmin(root);
         } catch (err) {
           setLibStatus(err.message || "GitHub 上传失败", "err");
+        } finally {
+          if (uploadBtn) uploadBtn.disabled = false;
+          setTimeout(() => hideUploadProgress(), 800);
         }
       });
 
