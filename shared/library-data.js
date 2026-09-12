@@ -19,6 +19,7 @@
   const API = "/api/library";
   const API_GH = "/api/library-github";
   const GH_PREFS_KEY = "cl-nav-github-release-v1";
+  const GH_DEFAULTS = { owner: "xiaochenbian-new", repo: "cl-nav-file" };
 
   function normalizeGhPart(s, kind) {
     let v = String(s || "")
@@ -38,12 +39,12 @@
     try {
       const raw = JSON.parse(localStorage.getItem(GH_PREFS_KEY) || "{}");
       return {
-        owner: normalizeGhPart(raw.owner || "", "owner"),
-        repo: normalizeGhPart(raw.repo || "", "repo"),
+        owner: normalizeGhPart(raw.owner || GH_DEFAULTS.owner, "owner") || GH_DEFAULTS.owner,
+        repo: normalizeGhPart(raw.repo || GH_DEFAULTS.repo, "repo") || GH_DEFAULTS.repo,
         token: String(raw.token || "").trim(),
       };
     } catch {
-      return { owner: "", repo: "", token: "" };
+      return { owner: GH_DEFAULTS.owner, repo: GH_DEFAULTS.repo, token: "" };
     }
   }
 
@@ -163,6 +164,46 @@
       return this.uploadToGitHub(file, meta);
     },
 
+    /** 测试 Token 能否访问目标仓库（不上传文件） */
+    async testGitHub(prefs) {
+      if (!window.NavAuth?.isLoggedIn?.()) throw new Error("请先登录后再测试");
+      if (typeof location !== "undefined" && location.protocol === "file:") {
+        throw new Error("请用 Cloudflare Pages 打开后再测试");
+      }
+      const gh = { ...loadGhPrefs(), ...(prefs || {}) };
+      gh.owner = normalizeGhPart(gh.owner, "owner");
+      gh.repo = normalizeGhPart(gh.repo, "repo");
+      gh.token = String(gh.token || "").trim();
+      if (!gh.owner || !gh.repo) throw new Error("请先填写仓库 Owner / Repo");
+      if (!gh.token) throw new Error("请先填写 GitHub Token");
+
+      const fd = new FormData();
+      fd.append("action", "test");
+      fd.append("ghOwner", gh.owner);
+      fd.append("ghRepo", gh.repo);
+      fd.append("ghToken", gh.token);
+
+      let res;
+      try {
+        res = await fetch(API_GH, {
+          method: "POST",
+          headers: authHeaders(false),
+          body: fd,
+          cache: "no-store",
+        });
+      } catch (err) {
+        throw new Error("无法连接 /api/library-github");
+      }
+      const ct = (res.headers.get("content-type") || "").toLowerCase();
+      if (ct.includes("text/html")) {
+        throw new Error("接口未部署：请确认 Cloudflare 已部署最新 Functions");
+      }
+      const j = await res.json().catch(() => ({}));
+      if (res.status === 401) throw new Error(j.error || "未授权，请重新登录");
+      if (!res.ok) throw new Error(j.error || "测试失败 HTTP " + res.status);
+      return j;
+    },
+
     /** 上传到 GitHub Releases，并自动写入资源库目录 */
     async uploadToGitHub(file, meta = {}) {
       if (!file) throw new Error("未选择文件");
@@ -185,6 +226,7 @@
       }
 
       const fd = new FormData();
+      fd.append("action", "upload");
       fd.append("file", file, file.name);
       fd.append("title", meta.title || file.name);
       fd.append("desc", meta.desc || "");
@@ -223,6 +265,7 @@
 
     loadGhPrefs,
     saveGhPrefs,
+    normalizeGhPart,
 
     async remove(id) {
       if (!id) throw new Error("缺少 id");

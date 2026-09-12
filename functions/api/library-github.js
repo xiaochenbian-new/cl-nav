@@ -51,6 +51,26 @@ function safeName(name) {
   );
 }
 
+/** 空格/特殊横线 → 普通横杠，避免 Owner 写成 xiaochenbian new */
+function normalizeGhPart(s, kind) {
+  let v = String(s || "")
+    .trim()
+    .replace(/^@/, "");
+  v = v.replace(/[\u00A0\u3000]/g, " ");
+  v = v.replace(/[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g, "-");
+  v = v.replace(/[\s_]+/g, "-");
+  v = v.replace(/-+/g, "-").replace(/^-|-$/g, "");
+  if (kind === "owner") v = v.toLowerCase();
+  return v;
+}
+
+function readGhCreds(form, env) {
+  const owner = normalizeGhPart(form.get("ghOwner") || env.GITHUB_OWNER || "", "owner");
+  const repo = normalizeGhPart(form.get("ghRepo") || env.GITHUB_REPO || "", "repo");
+  const token = String(form.get("ghToken") || env.GITHUB_TOKEN || "").trim();
+  return { owner, repo, token };
+}
+
 function formatSize(bytes) {
   const n = Number(bytes) || 0;
   if (n < 1024) return n + " B";
@@ -137,19 +157,15 @@ export async function onRequest(context) {
 
   try {
     const form = await request.formData();
-    const file = form.get("file");
-    if (!file || typeof file.arrayBuffer !== "function") {
-      return json({ error: "缺少 file 字段" }, 400, request);
-    }
-
-    const owner = String(form.get("ghOwner") || env.GITHUB_OWNER || "")
-      .trim()
-      .replace(/^@/, "");
-    const repo = String(form.get("ghRepo") || env.GITHUB_REPO || "").trim();
-    const token = String(form.get("ghToken") || env.GITHUB_TOKEN || "").trim();
+    const { owner, repo, token } = readGhCreds(form, env);
+    const action = String(form.get("action") || "upload").trim().toLowerCase();
 
     if (!owner || !repo) {
-      return json({ error: "请填写 GitHub 仓库：owner / repo（例如 xiaochenbian-new / cl-nav-files）" }, 400, request);
+      return json(
+        { error: "请填写 GitHub 仓库：owner / repo（例如 xiaochenbian-new / cl-nav-file）" },
+        400,
+        request
+      );
     }
     if (!token) {
       return json(
@@ -160,6 +176,40 @@ export async function onRequest(context) {
         400,
         request
       );
+    }
+
+    // 仅测试 Token + 仓库，不上传文件
+    if (action === "test") {
+      const repoRes = await ghFetch(`/repos/${owner}/${repo}`, token);
+      const repoBody = await repoRes.json().catch(() => ({}));
+      if (!repoRes.ok) {
+        const msg = repoBody.message || "无法访问仓库 HTTP " + repoRes.status;
+        let hint = "";
+        if (repoRes.status === 404) {
+          hint =
+            "。请核对仓库是 xiaochenbian-new/cl-nav-file，且 Token 勾选了 repo（或 fine-grained 勾选该仓库）";
+        } else if (repoRes.status === 401 || repoRes.status === 403) {
+          hint = "。Token 无效或权限不足，请重新生成 classic token 并勾选 repo";
+        }
+        return json({ error: msg + hint, repo: `${owner}/${repo}` }, 502, request);
+      }
+      return json(
+        {
+          ok: true,
+          message: "连接成功，可以上传",
+          repo: `${owner}/${repo}`,
+          htmlUrl: repoBody.html_url || `https://github.com/${owner}/${repo}`,
+          private: !!repoBody.private,
+          permissions: repoBody.permissions || null,
+        },
+        200,
+        request
+      );
+    }
+
+    const file = form.get("file");
+    if (!file || typeof file.arrayBuffer !== "function") {
+      return json({ error: "缺少 file 字段：请点蓝色按钮选择要上传的文件" }, 400, request);
     }
 
     const buf = await file.arrayBuffer();

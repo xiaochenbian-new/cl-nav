@@ -353,22 +353,23 @@
             <strong>资源库管理</strong>
           </div>
           <p class="settings-tip" style="margin:0 0 0.5rem">
-            推荐：配置 GitHub 后一键上传到 Releases，自动拿到下载链接并写入目录。也可继续用下方「外链」手动登记。
+            推荐：配置 GitHub 后先点「测试连接」，再点蓝色按钮选文件上传。成功后目录会自动出现条目。
           </p>
+          <p class="cfg-status" id="libAdminStatus" style="min-height:1.25em;margin:0 0 0.55rem"></p>
           <div class="cfg-webdav" style="box-shadow:none;border:0;padding:0;margin:0 0 0.75rem">
             <h4 style="margin:0 0 0.45rem;font-size:13px">GitHub Releases 上传</h4>
             <div class="cfg-webdav-grid" style="margin-bottom:0.55rem">
               <label>
                 <span>仓库 Owner</span>
                 <input type="text" id="ghOwner" placeholder="xiaochenbian-new" value="${esc(
-                  (window.LibraryStorage?.loadGhPrefs?.() || {}).owner || ""
-                )}" autocomplete="off" />
+                  (window.LibraryStorage?.loadGhPrefs?.() || {}).owner || "xiaochenbian-new"
+                )}" autocomplete="off" spellcheck="false" />
               </label>
               <label>
                 <span>仓库名 Repo</span>
-                <input type="text" id="ghRepo" placeholder="cl-nav-files" value="${esc(
-                  (window.LibraryStorage?.loadGhPrefs?.() || {}).repo || ""
-                )}" autocomplete="off" />
+                <input type="text" id="ghRepo" placeholder="cl-nav-file" value="${esc(
+                  (window.LibraryStorage?.loadGhPrefs?.() || {}).repo || "cl-nav-file"
+                )}" autocomplete="off" spellcheck="false" />
               </label>
               <label style="grid-column:1/-1">
                 <span>GitHub Token（仅保存在本机浏览器）</span>
@@ -377,14 +378,15 @@
                 )}" autocomplete="off" />
               </label>
             </div>
-            <div class="cfg-webdav-row" style="margin-bottom:0.45rem">
+            <div class="cfg-webdav-row" style="margin-bottom:0.45rem;flex-wrap:wrap">
               <button type="button" class="cfg-btn" id="ghSavePrefs">保存 GitHub 配置</button>
+              <button type="button" class="cfg-btn" id="ghTestBtn">测试连接</button>
               <button type="button" class="cfg-btn primary" id="ghUploadBtn">选择文件并上传到 Release</button>
               <input id="ghFileInput" type="file" hidden />
             </div>
             <p class="settings-tip" style="margin:0">
-              Token 需对目标仓库有写权限（classic 勾选 <code>repo</code>）。Owner/Repo <strong>不能有空格</strong>，例如
-              <code>xiaochenbian-new</code> / <code>cl-nav-files</code>（先在 GitHub 创建该仓库）。单文件建议 &lt; 95MB。
+              Token 需 classic 勾选 <code>repo</code>。仓库填
+              <code>xiaochenbian-new</code> / <code>cl-nav-file</code>（中间是横杠 <code>-</code>，不是空格）。单文件建议 &lt; 95MB。
             </p>
           </div>
           <div class="cfg-section-divider"></div>
@@ -397,7 +399,7 @@
             </label>
             <label>
               <span>下载地址</span>
-              <input type="url" id="libLinkUrl" placeholder="https://..." autocomplete="off" />
+              <input type="text" id="libLinkUrl" placeholder="https://..." autocomplete="off" spellcheck="false" />
             </label>
             <label>
               <span>分类</span>
@@ -418,7 +420,6 @@
             <button type="button" class="cfg-btn" id="libAdminAddLink">添加外链资源</button>
           </div>
           </div>
-          <p class="cfg-status" id="libAdminStatus"></p>
           <div class="cfg-list" id="libAdminList"></div>
         </div>
         <div class="cfg-pane" data-pane="data" ${tab !== "data" ? "hidden" : ""}>
@@ -542,7 +543,7 @@
       };
 
       if (!items.length) {
-        listEl.innerHTML = `<p class="settings-tip">目录为空。请先「保存 GitHub 配置」，再点蓝色按钮上传文件；或用下方添加外链。</p>`;
+        listEl.innerHTML = `<p class="settings-tip">（提示，不是错误）目录里还没有资源。请先「测试连接」，再点蓝色按钮选择文件上传。</p>`;
         return;
       }
 
@@ -576,9 +577,8 @@
         this.logout();
       });
 
-      root.querySelector("#ghSavePrefs")?.addEventListener("click", () => {
-        if (!window.LibraryStorage?.saveGhPrefs) return;
-        this.activeTab = "library";
+      const syncGhFields = () => {
+        if (!window.LibraryStorage?.saveGhPrefs) return null;
         const saved = LibraryStorage.saveGhPrefs({
           owner: root.querySelector("#ghOwner")?.value || "",
           repo: root.querySelector("#ghRepo")?.value || "",
@@ -588,24 +588,37 @@
         const repoEl = root.querySelector("#ghRepo");
         if (ownerEl) ownerEl.value = saved.owner;
         if (repoEl) repoEl.value = saved.repo;
+        return saved;
+      };
+
+      root.querySelector("#ghSavePrefs")?.addEventListener("click", () => {
+        this.activeTab = "library";
+        const saved = syncGhFields();
+        if (!saved) return;
         setLibStatus(
-          "已保存。将使用仓库：https://github.com/" + saved.owner + "/" + saved.repo,
+          "已保存（非错误）。仓库：https://github.com/" + saved.owner + "/" + saved.repo + " —— 请再点「测试连接」",
           "ok"
         );
       });
 
-      root.querySelector("#ghUploadBtn")?.addEventListener("click", () => {
-        if (window.LibraryStorage?.saveGhPrefs) {
-          const saved = LibraryStorage.saveGhPrefs({
-            owner: root.querySelector("#ghOwner")?.value || "",
-            repo: root.querySelector("#ghRepo")?.value || "",
-            token: root.querySelector("#ghToken")?.value || "",
-          });
-          const ownerEl = root.querySelector("#ghOwner");
-          const repoEl = root.querySelector("#ghRepo");
-          if (ownerEl) ownerEl.value = saved.owner;
-          if (repoEl) repoEl.value = saved.repo;
+      root.querySelector("#ghTestBtn")?.addEventListener("click", async () => {
+        if (!window.LibraryStorage?.testGitHub) return;
+        this.activeTab = "library";
+        const saved = syncGhFields();
+        setLibStatus("正在测试 GitHub 连接…");
+        try {
+          const j = await LibraryStorage.testGitHub(saved);
+          setLibStatus(
+            "连接成功：" + (j.htmlUrl || j.repo) + " —— 可以点蓝色按钮上传文件了",
+            "ok"
+          );
+        } catch (err) {
+          setLibStatus(err.message || "测试失败", "err");
         }
+      });
+
+      root.querySelector("#ghUploadBtn")?.addEventListener("click", () => {
+        syncGhFields();
         root.querySelector("#ghFileInput")?.click();
       });
 
