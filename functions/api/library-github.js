@@ -151,39 +151,99 @@ function formatGhError(body, fallback) {
   return msg;
 }
 
-/** 空仓库无法创建 Release：自动写一个 README 生成首个 commit */
+/** 空仓库无法创建 Release：用分支/文件探测，必要时自动写 README */
 async function ensureRepoNotEmpty(owner, repo, token) {
   const repoRes = await ghFetch(`/repos/${owner}/${repo}`, token);
   const repoBody = await repoRes.json().catch(() => ({}));
   if (!repoRes.ok) {
     return { ok: false, error: formatGhError(repoBody, "无法读取仓库"), detail: repoBody, status: repoRes.status };
   }
+
+  const defaultBranch = String(repoBody.default_branch || "main").trim() || "main";
+
+  async function hasBranchTip(branch) {
+    const refRes = await ghFetch(
+      `/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`,
+      token
+    );
+    return refRes.ok;
+  }
+
+  async function hasAnyContent() {
+    const rootRes = await ghFetch(`/repos/${owner}/${repo}/contents/`, token);
+    if (rootRes.ok) return true;
+    const readmeRes = await ghFetch(`/repos/${owner}/${repo}/contents/README.md`, token);
+    return readmeRes.ok;
+  }
+
+  // size 字段对新仓库经常滞后，优先看分支 tip / 根目录
+  if (await hasBranchTip(defaultBranch)) {
+    return { ok: true, repo: repoBody, initialized: false };
+  }
+  if (defaultBranch !== "master" && (await hasBranchTip("master"))) {
+    return { ok: true, repo: { ...repoBody, default_branch: "master" }, initialized: false };
+  }
+  if (await hasAnyContent()) {
+    return { ok: true, repo: repoBody, initialized: false };
+  }
   if (Number(repoBody.size) > 0) {
     return { ok: true, repo: repoBody, initialized: false };
   }
 
-  const putRes = await ghFetch(`/repos/${owner}/${repo}/contents/README.md`, token, {
+  const readmePath = `/repos/${owner}/${repo}/contents/README.md`;
+  const readmeBody =
+    "# cl-nav-file\n\nAuto-created by CL Nav so GitHub Releases can attach download files.\n";
+
+  // 若文件已存在，PUT 必须带 sha；先 GET 再决定 create/update
+  const existingRes = await ghFetch(readmePath, token);
+  const existingBody = await existingRes.json().catch(() => ({}));
+  const payload = {
+    message: "chore: initial commit for GitHub Releases",
+    content: toBase64(readmeBody),
+    branch: defaultBranch,
+  };
+  if (existingRes.ok && existingBody && existingBody.sha) {
+    // 已有 README：仓库其实不空，直接可用
+    return { ok: true, repo: repoBody, initialized: false };
+  }
+
+  const putRes = await ghFetch(readmePath, token, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message: "chore: initial commit for GitHub Releases",
-      content: toBase64(
-        "# cl-nav-file\n\nAuto-created by CL Nav so GitHub Releases can attach download files.\n"
-      ),
-    }),
+    body: JSON.stringify(payload),
   });
   const putBody = await putRes.json().catch(() => ({}));
-  if (!putRes.ok) {
-    return {
-      ok: false,
-      error:
-        formatGhError(putBody, "空仓库初始化失败") +
-        "。请打开仓库点 Add a README，提交一次后再上传",
-      detail: putBody,
-      status: putRes.status,
-    };
+  if (putRes.ok) {
+    return { ok: true, repo: repoBody, initialized: true };
   }
-  return { ok: true, repo: repoBody, initialized: true };
+
+  const msg = formatGhError(putBody, "空仓库初始化失败");
+  // 并发/二次上传：文件已存在但未带 sha → 说明已有 commit，可继续
+  if (/sha/i.test(msg) || putRes.status === 409 || putRes.status === 422) {
+    if (await hasAnyContent() || (await hasBranchTip(defaultBranch))) {
+      return { ok: true, repo: repoBody, initialized: false };
+    }
+    // 再试一次：带上 sha 更新（有时 GET 与 PUT 之间刚创建出来）
+    const again = await ghFetch(readmePath, token);
+    const againBody = await again.json().catch(() => ({}));
+    if (again.ok && againBody.sha) {
+      const upd = await ghFetch(readmePath, token, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, sha: againBody.sha }),
+      });
+      if (upd.ok) return { ok: true, repo: repoBody, initialized: true };
+      // 即使更新失败，有 sha 就说明仓库已有提交
+      return { ok: true, repo: repoBody, initialized: false };
+    }
+  }
+
+  return {
+    ok: false,
+    error: msg + "。请打开仓库确认已有至少一次提交，或给 Token 勾选 repo / Contents 写权限",
+    detail: putBody,
+    status: putRes.status,
+  };
 }
 
 export async function onRequest(context) {
@@ -248,13 +308,23 @@ export async function onRequest(context) {
         return json({ error: msg + hint, repo: `${owner}/${repo}` }, 502, request);
       }
       const empty = !(Number(repoBody.size) > 0);
+      // size 可能滞后：再探一下默认分支
+      let reallyEmpty = empty;
+      if (empty) {
+        const br = String(repoBody.default_branch || "main");
+        const refRes = await ghFetch(
+          `/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(br)}`,
+          token
+        );
+        reallyEmpty = !refRes.ok;
+      }
       return json(
         {
           ok: true,
-          message: empty
+          message: reallyEmpty
             ? "连接成功（仓库还是空的，首次上传会自动初始化）"
             : "连接成功，可以上传",
-          empty,
+          empty: reallyEmpty,
           repo: `${owner}/${repo}`,
           htmlUrl: repoBody.html_url || `https://github.com/${owner}/${repo}`,
           private: !!repoBody.private,
