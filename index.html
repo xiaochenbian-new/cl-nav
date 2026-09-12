@@ -39,6 +39,8 @@
       grid-row: 2;
       position: sticky;
       top: 0.85rem;
+      align-self: start;
+      margin-top: 0;
       z-index: 5;
       background: var(--panel);
       border: 1px solid var(--line);
@@ -689,7 +691,7 @@
     .main-stack {
       display: grid;
       gap: 0.85rem;
-      margin-top: 1rem;
+      margin-top: 0;
       min-width: 0;
     }
 
@@ -732,7 +734,7 @@
       .search-row { max-width: none; grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="stylesheet" href="shared/settings.css?v=20260328q" />
+  <link rel="stylesheet" href="shared/settings.css?v=20260328r" />
 </head>
 <body>
   <div class="page">
@@ -784,16 +786,16 @@
   </div>
 
   <script src="shared/data.js"></script>
-  <script src="shared/api-base.js?v=20260328q"></script>
+  <script src="shared/api-base.js?v=20260328r"></script>
   <script src="shared/favicon-cache.js"></script>
   <script src="shared/store.js"></script>
   <script src="shared/auth.js"></script>
   <script src="shared/login-ui.js"></script>
-  <script src="shared/cf-sync.js?v=20260328q"></script>
-  <script src="shared/webdav.js?v=20260328q"></script>
-  <script src="shared/library-data.js?v=20260328q"></script>
+  <script src="shared/cf-sync.js?v=20260328r"></script>
+  <script src="shared/webdav.js?v=20260328r"></script>
+  <script src="shared/library-data.js?v=20260328r"></script>
   <script src="shared/portal.js"></script>
-  <script src="shared/config-ui.js?v=20260328q"></script>
+  <script src="shared/config-ui.js?v=20260328r"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {

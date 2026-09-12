@@ -8,6 +8,29 @@
       .replace(/"/g, "&quot;");
   }
 
+  function pad(n) {
+    return String(n).padStart(2, "0");
+  }
+
+  function formatClock(d = new Date()) {
+    const week = ["日", "一", "二", "三", "四", "五", "六"][d.getDay()];
+    return (
+      d.getFullYear() +
+      "-" +
+      pad(d.getMonth() + 1) +
+      "-" +
+      pad(d.getDate()) +
+      " 周" +
+      week +
+      " " +
+      pad(d.getHours()) +
+      ":" +
+      pad(d.getMinutes()) +
+      ":" +
+      pad(d.getSeconds())
+    );
+  }
+
   function formatDate(v) {
     if (!v) return "—";
     try {
@@ -28,9 +51,12 @@
   window.LibraryUI = {
     filter: { category: "all", q: "" },
     items: [],
+    _clockTimer: 0,
 
     async init() {
+      this.renderNav();
       this.renderToolbar();
+      this.startClock();
       this.bind();
       if (window.LibUploadQueue) {
         const dock = document.getElementById("libPageUploadDock");
@@ -47,6 +73,30 @@
       this.renderSide();
       this.renderSideLinks();
       this.renderList();
+    },
+
+    startClock() {
+      const el = document.getElementById("libClock");
+      if (!el) return;
+      const tick = () => {
+        const now = new Date();
+        el.textContent = formatClock(now);
+        el.dateTime = now.toISOString();
+      };
+      tick();
+      window.clearInterval(this._clockTimer);
+      this._clockTimer = window.setInterval(tick, 1000);
+    },
+
+    renderNav() {
+      const nav = document.getElementById("topNav");
+      if (!nav) return;
+      // 与首页顶栏一致：时间旁为「返回首页」+「设置」+ GH（首页对应位置是「资源库」）
+      nav.innerHTML = `
+        <a href="index.html" data-id="home">返回首页</a>
+        <a href="#settings" data-id="settings" data-action="settings">设置</a>
+        ${window.Portal?.mirrorSwitchHtml?.() || ""}
+      `;
     },
 
     openSettings() {
@@ -93,6 +143,7 @@
     renderSideLinks() {
       const el = document.getElementById("libSideLinks");
       const wrap = document.getElementById("libSideLinksWrap");
+      const toggle = document.getElementById("libSideLinksToggle");
       if (!el) return;
       const links =
         window.LibraryStorage?.normalizeSidebarLinks?.(LIBRARY_DATA.sidebarLinks, {
@@ -100,16 +151,30 @@
         }) || [];
       if (!links.length) {
         el.innerHTML = `<p class="lib-side-links-empty">暂无网盘入口，可在设置 → 资源库中配置</p>`;
-        if (wrap) wrap.hidden = false;
-        return;
+      } else {
+        el.innerHTML = links
+          .map(
+            (l) =>
+              `<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.name)}</a>`
+          )
+          .join("");
       }
-      el.innerHTML = links
-        .map(
-          (l) =>
-            `<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.name)}</a>`
-        )
-        .join("");
+      // 默认收起；刷新列表时保持用户当前展开状态
+      if (wrap && !wrap.dataset.inited) {
+        wrap.classList.remove("is-open");
+        wrap.dataset.inited = "1";
+        if (toggle) toggle.setAttribute("aria-expanded", "false");
+      }
       if (wrap) wrap.hidden = false;
+    },
+
+    toggleSideLinks() {
+      const wrap = document.getElementById("libSideLinksWrap");
+      const toggle = document.getElementById("libSideLinksToggle");
+      if (!wrap) return;
+      const open = !wrap.classList.contains("is-open");
+      wrap.classList.toggle("is-open", open);
+      if (toggle) toggle.setAttribute("aria-expanded", open ? "true" : "false");
     },
 
     renderToolbar() {
@@ -196,6 +261,10 @@
         this.renderList();
       });
 
+      document.getElementById("libSideLinksToggle")?.addEventListener("click", () => {
+        this.toggleSideLinks();
+      });
+
       document.getElementById("libSearch")?.addEventListener("input", (e) => {
         this.filter.q = e.target.value || "";
         this.renderList();
@@ -219,6 +288,13 @@
 
       document.getElementById("backTop")?.addEventListener("click", () => {
         window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+
+      document.getElementById("topNav")?.addEventListener("click", (e) => {
+        const a = e.target.closest("a[data-action='settings']");
+        if (!a) return;
+        e.preventDefault();
+        this.openSettings();
       });
 
       document.getElementById("libOpenSettings")?.addEventListener("click", (e) => {
