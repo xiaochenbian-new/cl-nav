@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="shared/portal.css" />
-  <link rel="stylesheet" href="shared/settings.css?v=20260328o" />
+  <link rel="stylesheet" href="shared/settings.css?v=20260328p" />
   <style>
     .page {
       --side-gap: 0.85rem;
@@ -29,12 +29,19 @@
       min-width: 0;
     }
 
-    .side-wrap {
+    .side-col {
       grid-column: 1;
       grid-row: 2;
       position: sticky;
       top: 0.85rem;
       z-index: 5;
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+      align-self: start;
+    }
+
+    .side-wrap {
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: var(--radius);
@@ -102,9 +109,66 @@
     .side-top:hover { color: var(--accent); }
 
     .lib-upload-dock {
-      margin: 0.15rem 0 0;
-      max-height: 40vh;
+      margin: 0;
+      max-height: 36vh;
       overflow: auto;
+    }
+
+    .lib-side-links {
+      display: grid;
+      gap: 0.25rem;
+    }
+
+    .lib-side-links a {
+      display: block;
+      padding: 0.48rem 0.55rem;
+      border-radius: 8px;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 650;
+      text-decoration: none;
+    }
+
+    .lib-side-links a:hover {
+      color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .lib-side-links-empty {
+      margin: 0;
+      padding: 0.35rem 0.45rem;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .lib-clock {
+      margin-left: auto;
+      font-size: 12px;
+      font-weight: 650;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      letter-spacing: 0.01em;
+    }
+
+    .lib-home-btn {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0.35rem 0.7rem;
+      background: var(--panel);
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 650;
+      text-decoration: none;
+    }
+
+    .lib-home-btn:hover {
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+      background: var(--accent-soft);
     }
 
     .shell-main {
@@ -386,7 +450,7 @@
       .page {
         grid-template-columns: 1fr;
       }
-      .side-wrap {
+      .side-col {
         position: static;
         grid-column: 1;
       }
@@ -394,6 +458,10 @@
         grid-auto-flow: column;
         grid-auto-columns: max-content;
         overflow-x: auto;
+      }
+      .lib-clock {
+        margin-left: 0;
+        width: 100%;
       }
       .shell-main { grid-column: 1; }
       .lib-card { flex-direction: column; align-items: stretch; }
@@ -413,17 +481,20 @@
           <span class="tagline">资源库</span>
         </a>
         <nav class="top-nav" id="topNav" aria-label="主导航"></nav>
-        <div class="search-actions" aria-label="主题">
-          <button type="button" data-theme-btn="light" title="浅色">☀</button>
-          <button type="button" data-theme-btn="dark" title="深色">☾</button>
-        </div>
+        <time class="lib-clock" id="libClock" datetime=""></time>
+        <a class="lib-home-btn" href="index.html">返回首页</a>
       </header>
     </div>
 
-    <aside class="side-wrap">
-      <nav class="lib-side" id="libSide" aria-label="资源分类"></nav>
-      <div class="lib-upload-dock cfg-lib-upload-dock" id="libPageUploadDock" hidden></div>
-      <button type="button" class="side-top" id="backTop" title="返回顶部">↑ 顶部</button>
+    <aside class="side-col">
+      <div class="side-wrap">
+        <nav class="lib-side" id="libSide" aria-label="资源分类"></nav>
+        <button type="button" class="side-top" id="backTop" title="返回顶部">↑ 顶部</button>
+      </div>
+      <div class="side-wrap" id="libSideLinksWrap">
+        <nav class="lib-side-links" id="libSideLinks" aria-label="网盘入口"></nav>
+      </div>
+      <div class="side-wrap cfg-lib-upload-dock lib-upload-dock" id="libPageUploadDock" hidden></div>
     </aside>
 
     <div class="shell-main">
@@ -465,16 +536,16 @@
   </div>
 
   <script src="shared/data.js"></script>
-  <script src="shared/api-base.js?v=20260328o"></script>
+  <script src="shared/api-base.js?v=20260328p"></script>
   <script src="shared/store.js"></script>
   <script src="shared/auth.js"></script>
   <script src="shared/login-ui.js"></script>
-  <script src="shared/cf-sync.js?v=20260328o"></script>
-  <script src="shared/webdav.js?v=20260328o"></script>
+  <script src="shared/cf-sync.js?v=20260328p"></script>
+  <script src="shared/webdav.js?v=20260328p"></script>
   <script src="shared/portal.js"></script>
-  <script src="shared/library-data.js?v=20260328o"></script>
-  <script src="shared/config-ui.js?v=20260328o"></script>
-  <script src="shared/library.js?v=20260328o"></script>
+  <script src="shared/library-data.js?v=20260328p"></script>
+  <script src="shared/config-ui.js?v=20260328p"></script>
+  <script src="shared/library.js?v=20260328p"></script>
   <script>
     LibraryUI.init();
   </script>

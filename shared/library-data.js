@@ -8,12 +8,18 @@
     { id: "other", name: "其他" },
   ];
 
+  const DEFAULT_SIDEBAR_LINKS = [
+    { id: "pan123", name: "123网盘", url: "https://www.123pan.com/" },
+    { id: "baidu", name: "百度网盘", url: "https://pan.baidu.com/" },
+  ];
+
   window.LIBRARY_DATA = {
     brand: "CL Nav",
     title: "资源库",
     tagline: "软件 · 安装包 · 常用资源",
     storageMode: "url",
     categories: DEFAULT_CATEGORIES.map((c) => ({ ...c })),
+    sidebarLinks: DEFAULT_SIDEBAR_LINKS.map((c) => ({ ...c })),
     items: [],
   };
 
@@ -52,6 +58,29 @@
     }
     if (!out.length) return DEFAULT_CATEGORIES.map((c) => ({ ...c }));
     if (!out.some((c) => c.id === "other")) out.push({ id: "other", name: "其他" });
+    return out;
+  }
+
+  function normalizeSidebarLinks(list, { allowEmpty = true } = {}) {
+    if (!Array.isArray(list)) return DEFAULT_SIDEBAR_LINKS.map((c) => ({ ...c }));
+    const seen = new Set();
+    const out = [];
+    for (const raw of list) {
+      if (!raw) continue;
+      const name = String(raw.name || "").trim().slice(0, 40);
+      let url = String(raw.url || raw.href || "").trim();
+      if (!name || !url) continue;
+      if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+      let id = String(raw.id || "")
+        .trim()
+        .replace(/\s+/g, "-")
+        .slice(0, 40);
+      if (!id) id = "link_" + Math.random().toString(36).slice(2, 8);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push({ id, name, url: url.slice(0, 500) });
+    }
+    if (!out.length && !allowEmpty) return DEFAULT_SIDEBAR_LINKS.map((c) => ({ ...c }));
     return out;
   }
 
@@ -227,12 +256,15 @@
       const items = Array.isArray(data.items) ? data.items : [];
       LIBRARY_DATA.items = items;
       LIBRARY_DATA.categories = normalizeCategories(data.categories);
+      LIBRARY_DATA.sidebarLinks = normalizeSidebarLinks(data.sidebarLinks);
       LIBRARY_DATA.storageMode = data.storageMode || "url";
       return items.slice();
     },
 
     defaultCategories: DEFAULT_CATEGORIES,
+    defaultSidebarLinks: DEFAULT_SIDEBAR_LINKS,
     normalizeCategories,
+    normalizeSidebarLinks,
     uiCategories,
     categoryOptionsHtml,
     newCatId,
@@ -248,8 +280,24 @@
       if (res.status === 401) throw new Error(j.error || "未授权，请重新登录");
       if (!res.ok) throw new Error(j.error || "保存分类失败 HTTP " + res.status);
       LIBRARY_DATA.categories = normalizeCategories(j.categories || next);
+      if (j.sidebarLinks) LIBRARY_DATA.sidebarLinks = normalizeSidebarLinks(j.sidebarLinks);
       markSyncDirty();
       return LIBRARY_DATA.categories.slice();
+    },
+
+    async saveSidebarLinks(links) {
+      if (!window.NavAuth?.isLoggedIn?.()) throw new Error("请先登录后再管理侧栏入口");
+      const next = normalizeSidebarLinks(links, { allowEmpty: true });
+      const res = await api("POST", {
+        body: JSON.stringify({ action: "sidebarLinksSave", sidebarLinks: next }),
+        headers: authHeaders(true),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.status === 401) throw new Error(j.error || "未授权，请重新登录");
+      if (!res.ok) throw new Error(j.error || "保存侧栏入口失败 HTTP " + res.status);
+      LIBRARY_DATA.sidebarLinks = normalizeSidebarLinks(j.sidebarLinks || next, { allowEmpty: true });
+      markSyncDirty();
+      return LIBRARY_DATA.sidebarLinks.slice();
     },
 
     async exportCatalog() {
@@ -259,6 +307,7 @@
       return {
         version: 1,
         categories: normalizeCategories(LIBRARY_DATA.categories),
+        sidebarLinks: normalizeSidebarLinks(LIBRARY_DATA.sidebarLinks, { allowEmpty: true }),
         items: Array.isArray(LIBRARY_DATA.items) ? LIBRARY_DATA.items.slice() : [],
         storageMode: LIBRARY_DATA.storageMode || "url",
       };
@@ -268,12 +317,18 @@
       if (!catalog || typeof catalog !== "object") return false;
       const categories = normalizeCategories(catalog.categories);
       const items = Array.isArray(catalog.items) ? catalog.items : [];
+      const sidebarLinks =
+        catalog.sidebarLinks !== undefined
+          ? normalizeSidebarLinks(catalog.sidebarLinks, { allowEmpty: true })
+          : undefined;
       const headers = authHeaders(true);
       if (!headers.Authorization) {
         headers.Authorization = "Bearer " + (window.NavAuth?.adminPass?.() || "xiaochenbian");
       }
+      const body = { action: "replaceCatalog", categories, items };
+      if (sidebarLinks) body.sidebarLinks = sidebarLinks;
       const res = await api("POST", {
-        body: JSON.stringify({ action: "replaceCatalog", categories, items }),
+        body: JSON.stringify(body),
         headers,
       });
       const j = await res.json().catch(() => ({}));
@@ -281,6 +336,10 @@
       if (!res.ok) throw new Error(j.error || "导入资源库失败 HTTP " + res.status);
       LIBRARY_DATA.categories = normalizeCategories(j.categories || categories);
       LIBRARY_DATA.items = Array.isArray(j.items) ? j.items : items;
+      LIBRARY_DATA.sidebarLinks = normalizeSidebarLinks(
+        j.sidebarLinks !== undefined ? j.sidebarLinks : sidebarLinks,
+        { allowEmpty: true }
+      );
       return true;
     },
 

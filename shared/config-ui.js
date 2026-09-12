@@ -714,6 +714,18 @@
               </span>
             </div>
           </section>
+
+          <section class="cfg-lib-section cfg-lib-side-links-admin">
+            <header class="cfg-lib-section-h">
+              <strong>侧栏网盘入口</strong>
+              <span>显示在资源库左侧分类下方</span>
+            </header>
+            <div class="cfg-lib-side-link-list" id="libSideLinkAdmin"></div>
+            <div class="cfg-lib-actions">
+              <button type="button" class="cfg-btn" id="libSideLinkAdd">＋ 添加入口</button>
+              <button type="button" class="cfg-btn primary" id="libSideLinkSave">保存入口</button>
+            </div>
+          </section>
           <div class="cfg-lib-upload-dock" id="libUploadDock" hidden></div>
 
           <div class="cfg-lib-list-head">
@@ -1029,6 +1041,29 @@
           }
         },
       });
+
+      this.renderLibSidebarLinksAdmin(root);
+    },
+
+    renderLibSidebarLinksAdmin(root, links) {
+      const list = root?.querySelector("#libSideLinkAdmin");
+      if (!list) return;
+      const rows =
+        links ||
+        LibraryStorage.normalizeSidebarLinks?.(LIBRARY_DATA.sidebarLinks, { allowEmpty: true }) ||
+        [];
+      const data = rows.length ? rows : [{ id: "", name: "", url: "" }];
+      list.innerHTML = data
+        .map(
+          (l) => `
+        <div class="cfg-lib-side-link-row" data-side-link-row>
+          <input type="hidden" data-side-link-id value="${esc(l.id || "")}" />
+          <input type="text" data-side-link-name placeholder="名称，如 123网盘" value="${esc(l.name || "")}" />
+          <input type="url" data-side-link-url placeholder="https://…" value="${esc(l.url || "")}" spellcheck="false" />
+          <button type="button" class="cfg-btn cfg-lib-x" data-side-link-remove title="移除">×</button>
+        </div>`
+        )
+        .join("");
     },
 
     syncLibBatchUi(root) {
@@ -1220,6 +1255,57 @@
           if (window.LibraryUI?.refreshListQuiet) LibraryUI.refreshListQuiet();
         } catch (err) {
           setLibStatus(err.message || "添加分类失败", "err");
+        }
+      });
+
+      const readSideLinkRows = () =>
+        [...root.querySelectorAll("#libSideLinkAdmin [data-side-link-row]")].map((row) => ({
+          id: String(row.querySelector("[data-side-link-id]")?.value || "").trim(),
+          name: String(row.querySelector("[data-side-link-name]")?.value || "").trim(),
+          url: String(row.querySelector("[data-side-link-url]")?.value || "").trim(),
+        }));
+
+      root.querySelector("#libSideLinkAdd")?.addEventListener("click", () => {
+        this.activeTab = "library";
+        const list = root.querySelector("#libSideLinkAdmin");
+        if (!list) return;
+        list.insertAdjacentHTML(
+          "beforeend",
+          `<div class="cfg-lib-side-link-row" data-side-link-row>
+            <input type="hidden" data-side-link-id value="" />
+            <input type="text" data-side-link-name placeholder="名称，如 123网盘" value="" />
+            <input type="url" data-side-link-url placeholder="https://…" value="" spellcheck="false" />
+            <button type="button" class="cfg-btn cfg-lib-x" data-side-link-remove title="移除">×</button>
+          </div>`
+        );
+      });
+
+      root.querySelector("#libSideLinkAdmin")?.addEventListener("click", (e) => {
+        if (!e.target.closest("[data-side-link-remove]")) return;
+        const row = e.target.closest("[data-side-link-row]");
+        const list = root.querySelector("#libSideLinkAdmin");
+        if (!row || !list) return;
+        if (list.querySelectorAll("[data-side-link-row]").length <= 1) {
+          row.querySelector("[data-side-link-name]").value = "";
+          row.querySelector("[data-side-link-url]").value = "";
+          row.querySelector("[data-side-link-id]").value = "";
+        } else {
+          row.remove();
+        }
+      });
+
+      root.querySelector("#libSideLinkSave")?.addEventListener("click", async () => {
+        if (!window.LibraryStorage?.saveSidebarLinks) return;
+        this.activeTab = "library";
+        const rows = readSideLinkRows().filter((r) => r.name && r.url);
+        setLibStatus("正在保存侧栏入口…");
+        try {
+          await LibraryStorage.saveSidebarLinks(rows);
+          setLibStatus("侧栏网盘入口已保存", "ok");
+          this.renderLibSidebarLinksAdmin(root);
+          if (window.LibraryUI?.renderSideLinks) LibraryUI.renderSideLinks();
+        } catch (err) {
+          setLibStatus(err.message || "保存侧栏入口失败", "err");
         }
       });
 

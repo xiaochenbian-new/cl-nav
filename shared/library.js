@@ -19,6 +19,29 @@
     }
   }
 
+  function pad(n) {
+    return String(n).padStart(2, "0");
+  }
+
+  function formatClock(d = new Date()) {
+    const week = ["日", "一", "二", "三", "四", "五", "六"][d.getDay()];
+    return (
+      d.getFullYear() +
+      "-" +
+      pad(d.getMonth() + 1) +
+      "-" +
+      pad(d.getDate()) +
+      " 周" +
+      week +
+      " " +
+      pad(d.getHours()) +
+      ":" +
+      pad(d.getMinutes()) +
+      ":" +
+      pad(d.getSeconds())
+    );
+  }
+
   function catName(id) {
     const list = window.LibraryStorage?.uiCategories?.() || LIBRARY_DATA.categories || [];
     const c = list.find((x) => x.id === id);
@@ -28,12 +51,13 @@
   window.LibraryUI = {
     filter: { category: "all", q: "" },
     items: [],
+    _clockTimer: 0,
 
     async init() {
       this.renderNav();
       this.renderToolbar();
+      this.startClock();
       this.bind();
-      if (window.Portal?.bindTheme) Portal.bindTheme();
       if (window.LibUploadQueue) {
         const dock = document.getElementById("libPageUploadDock");
         if (dock) LibUploadQueue.bindDock(dock);
@@ -47,7 +71,21 @@
         this.setStatus(err.message || "无法读取云端目录（请确认已创建 R2 并完成部署）", "err");
       }
       this.renderSide();
+      this.renderSideLinks();
       this.renderList();
+    },
+
+    startClock() {
+      const el = document.getElementById("libClock");
+      if (!el) return;
+      const tick = () => {
+        const now = new Date();
+        el.textContent = formatClock(now);
+        el.dateTime = now.toISOString();
+      };
+      tick();
+      window.clearInterval(this._clockTimer);
+      this._clockTimer = window.setInterval(tick, 1000);
     },
 
     renderNav() {
@@ -71,8 +109,8 @@
       if (location.hash === "#settings") {
         history.replaceState(null, "", location.pathname + location.search);
       }
-      // 关闭后刷新资源列表（可能刚在设置里改过）
       this.refreshListQuiet();
+      this.renderSideLinks();
     },
 
     async refreshListQuiet() {
@@ -80,6 +118,7 @@
       try {
         this.items = await LibraryStorage.list();
         this.renderSide();
+        this.renderSideLinks();
         this.renderList();
       } catch (_) {}
     },
@@ -99,6 +138,28 @@
           </button>`;
         })
         .join("");
+    },
+
+    renderSideLinks() {
+      const el = document.getElementById("libSideLinks");
+      const wrap = document.getElementById("libSideLinksWrap");
+      if (!el) return;
+      const links =
+        window.LibraryStorage?.normalizeSidebarLinks?.(LIBRARY_DATA.sidebarLinks, {
+          allowEmpty: true,
+        }) || [];
+      if (!links.length) {
+        el.innerHTML = `<p class="lib-side-links-empty">暂无网盘入口，可在设置 → 资源库中配置</p>`;
+        if (wrap) wrap.hidden = false;
+        return;
+      }
+      el.innerHTML = links
+        .map(
+          (l) =>
+            `<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.name)}</a>`
+        )
+        .join("");
+      if (wrap) wrap.hidden = false;
     },
 
     renderToolbar() {
@@ -192,16 +253,15 @@
 
       document.getElementById("libList")?.addEventListener("click", async (e) => {
         const btn = e.target.closest("[data-dl]");
-        if (!btn || btn.disabled) return;
-        const id = btn.dataset.dl;
-        const idx = Number(btn.dataset.dlIdx || 0);
-        const item = this.items.find((x) => x.id === id);
+        if (!btn || !window.LibraryStorage) return;
+        const item = this.items.find((x) => x.id === btn.dataset.dl);
         if (!item) return;
+        const idx = Number(btn.dataset.dlIdx || 0);
+        const links = LibraryStorage.itemLinks(item);
+        const link = links[idx] || links[0] || null;
         try {
-          const links = window.LibraryStorage?.itemLinks?.(item) || [];
-          const link = links[idx] || links[0] || null;
           const url = await LibraryStorage.getDownloadUrl(item, link);
-          window.open(url, "_blank", "noopener,noreferrer");
+          window.open(url, "_blank", "noopener");
         } catch (err) {
           this.setStatus(err.message || "下载失败", "err");
         }

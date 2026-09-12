@@ -21,6 +21,11 @@ const DEFAULT_LIB_CATEGORIES = [
   { id: "other", name: "其他" },
 ];
 
+const DEFAULT_SIDEBAR_LINKS = [
+  { id: "pan123", name: "123网盘", url: "https://www.123pan.com/" },
+  { id: "baidu", name: "百度网盘", url: "https://pan.baidu.com/" },
+];
+
 function cors(req) {
   const origin = req.headers.get("Origin") || "*";
   return {
@@ -141,10 +146,49 @@ function normalizeCategories(list) {
   return out;
 }
 
+function normalizeSidebarLinks(list, { allowEmpty = true } = {}) {
+  if (!Array.isArray(list)) {
+    return DEFAULT_SIDEBAR_LINKS.map((x) => ({ ...x }));
+  }
+  const seen = new Set();
+  const out = [];
+  for (const raw of list) {
+    if (!raw) continue;
+    const name = String(raw.name || "").trim().slice(0, 40);
+    let url = String(raw.url || raw.href || "").trim();
+    if (!name || !url) continue;
+    if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+    let id = String(raw.id || "")
+      .trim()
+      .replace(/\s+/g, "-")
+      .slice(0, 40);
+    if (!id) id = "link_" + Math.random().toString(36).slice(2, 8);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, name, url: url.slice(0, 500) });
+  }
+  if (!out.length && !allowEmpty) return DEFAULT_SIDEBAR_LINKS.map((x) => ({ ...x }));
+  return out;
+}
+
 async function readCatalogDoc(kv) {
-  if (!kv) return { items: [], categories: normalizeCategories(null), storageMode: "url" };
+  if (!kv) {
+    return {
+      items: [],
+      categories: normalizeCategories(null),
+      sidebarLinks: normalizeSidebarLinks(null),
+      storageMode: "url",
+    };
+  }
   const raw = await kv.get(CATALOG_KEY);
-  if (!raw) return { items: [], categories: normalizeCategories(null), storageMode: "url" };
+  if (!raw) {
+    return {
+      items: [],
+      categories: normalizeCategories(null),
+      sidebarLinks: normalizeSidebarLinks(null),
+      storageMode: "url",
+    };
+  }
   try {
     const parsed = JSON.parse(raw);
     const items = Array.isArray(parsed)
@@ -155,10 +199,16 @@ async function readCatalogDoc(kv) {
     return {
       items,
       categories: normalizeCategories(parsed && parsed.categories),
+      sidebarLinks: normalizeSidebarLinks(parsed && parsed.sidebarLinks),
       storageMode: (parsed && parsed.storageMode) || "url",
     };
   } catch {
-    return { items: [], categories: normalizeCategories(null), storageMode: "url" };
+    return {
+      items: [],
+      categories: normalizeCategories(null),
+      sidebarLinks: normalizeSidebarLinks(null),
+      storageMode: "url",
+    };
   }
 }
 
@@ -167,6 +217,10 @@ async function writeCatalogDoc(kv, patch = {}) {
   const items = patch.items !== undefined ? patch.items : prev.items;
   const categories =
     patch.categories !== undefined ? normalizeCategories(patch.categories) : prev.categories;
+  const sidebarLinks =
+    patch.sidebarLinks !== undefined
+      ? normalizeSidebarLinks(patch.sidebarLinks, { allowEmpty: true })
+      : prev.sidebarLinks;
   const storageMode = patch.storageMode || prev.storageMode || "url";
   await kv.put(
     CATALOG_KEY,
@@ -175,10 +229,11 @@ async function writeCatalogDoc(kv, patch = {}) {
       updatedAt: Date.now(),
       storageMode,
       categories,
+      sidebarLinks,
       items,
     })
   );
-  return { items, categories, storageMode };
+  return { items, categories, sidebarLinks, storageMode };
 }
 
 async function readCatalog(kv) {
@@ -242,6 +297,7 @@ export async function onRequest(context) {
           ok: true,
           storageMode: r2 ? "r2+url" : doc.storageMode || "url",
           categories: doc.categories,
+          sidebarLinks: doc.sidebarLinks,
           items: doc.items.map(withNormalized),
         },
         200,
@@ -314,17 +370,28 @@ export async function onRequest(context) {
             return it;
           });
           const saved = await writeCatalogDoc(kv, { categories, items });
-          return json({ ok: true, categories: saved.categories }, 200, request);
+          return json({ ok: true, categories: saved.categories, sidebarLinks: saved.sidebarLinks }, 200, request);
+        }
+
+        if (action === "sidebarlinkssave") {
+          const sidebarLinks = normalizeSidebarLinks(body.sidebarLinks, { allowEmpty: true });
+          const saved = await writeCatalogDoc(kv, { sidebarLinks });
+          return json({ ok: true, sidebarLinks: saved.sidebarLinks }, 200, request);
         }
 
         if (action === "replacecatalog") {
           const categories = normalizeCategories(body.categories);
           const items = Array.isArray(body.items) ? body.items : [];
-          const doc = await writeCatalogDoc(kv, { categories, items });
+          const patch = { categories, items };
+          if (body.sidebarLinks !== undefined) {
+            patch.sidebarLinks = normalizeSidebarLinks(body.sidebarLinks, { allowEmpty: true });
+          }
+          const doc = await writeCatalogDoc(kv, patch);
           return json(
             {
               ok: true,
               categories: doc.categories,
+              sidebarLinks: doc.sidebarLinks,
               items: doc.items.map(withNormalized),
             },
             200,
