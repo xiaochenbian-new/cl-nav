@@ -20,13 +20,27 @@
   const API_GH = "/api/library-github";
   const GH_PREFS_KEY = "cl-nav-github-release-v1";
 
+  function normalizeGhPart(s, kind) {
+    let v = String(s || "")
+      .trim()
+      .replace(/^@/, "");
+    // 全角空格、各种横线 → 统一
+    v = v.replace(/[\u00A0\u3000]/g, " ");
+    v = v.replace(/[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g, "-");
+    // 空格、下划线多余分隔 → 横杠
+    v = v.replace(/[\s_]+/g, "-");
+    v = v.replace(/-+/g, "-").replace(/^-|-$/g, "");
+    if (kind === "owner") v = v.toLowerCase();
+    return v;
+  }
+
   function loadGhPrefs() {
     try {
       const raw = JSON.parse(localStorage.getItem(GH_PREFS_KEY) || "{}");
       return {
-        owner: String(raw.owner || ""),
-        repo: String(raw.repo || ""),
-        token: String(raw.token || ""),
+        owner: normalizeGhPart(raw.owner || "", "owner"),
+        repo: normalizeGhPart(raw.repo || "", "repo"),
+        token: String(raw.token || "").trim(),
       };
     } catch {
       return { owner: "", repo: "", token: "" };
@@ -34,16 +48,12 @@
   }
 
   function saveGhPrefs(patch) {
-    const next = { ...loadGhPrefs(), ...patch };
-    // GitHub 用户名/仓库名不能有空格：xiaochenbian-new / cl-nav-files
-    next.owner = String(next.owner || "")
-      .trim()
-      .replace(/^@/, "")
-      .replace(/\s+/g, "-");
-    next.repo = String(next.repo || "")
-      .trim()
-      .replace(/\s+/g, "-");
-    next.token = String(next.token || "").trim();
+    const cur = loadGhPrefs();
+    const next = {
+      owner: normalizeGhPart(patch.owner != null ? patch.owner : cur.owner, "owner"),
+      repo: normalizeGhPart(patch.repo != null ? patch.repo : cur.repo, "repo"),
+      token: String(patch.token != null ? patch.token : cur.token || "").trim(),
+    };
     localStorage.setItem(GH_PREFS_KEY, JSON.stringify(next));
     return next;
   }
@@ -162,17 +172,16 @@
       }
 
       const gh = { ...loadGhPrefs(), ...(meta.github || {}) };
-      gh.owner = String(gh.owner || "")
-        .trim()
-        .replace(/^@/, "")
-        .replace(/\s+/g, "-");
-      gh.repo = String(gh.repo || "")
-        .trim()
-        .replace(/\s+/g, "-");
+      gh.owner = normalizeGhPart(gh.owner, "owner");
+      gh.repo = normalizeGhPart(gh.repo, "repo");
+      gh.token = String(gh.token || "").trim();
       if (!gh.owner || !gh.repo) throw new Error("请先填写并保存 GitHub 仓库 owner / repo");
       if (!gh.token) throw new Error("请先填写并保存 GitHub Token");
-      if (/\s/.test(gh.owner) || /\s/.test(gh.repo)) {
-        throw new Error("Owner / Repo 不能包含空格，请用横杠，例如 xiaochenbian-new / cl-nav-files");
+      if (!/^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$/i.test(gh.owner)) {
+        throw new Error("Owner 格式不正确，应为 xiaochenbian-new（只能字母数字和横杠）");
+      }
+      if (!/^[A-Za-z0-9_.-]+$/.test(gh.repo)) {
+        throw new Error("Repo 格式不正确，应为 cl-nav-file（不能有空格）");
       }
 
       const fd = new FormData();

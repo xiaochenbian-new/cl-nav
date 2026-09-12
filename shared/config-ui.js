@@ -542,7 +542,7 @@
       };
 
       if (!items.length) {
-        listEl.innerHTML = `<p class="settings-tip">暂无资源。请用上方「添加外链资源」登记下载地址。</p>`;
+        listEl.innerHTML = `<p class="settings-tip">目录为空。请先「保存 GitHub 配置」，再点蓝色按钮上传文件；或用下方添加外链。</p>`;
         return;
       }
 
@@ -579,21 +579,32 @@
       root.querySelector("#ghSavePrefs")?.addEventListener("click", () => {
         if (!window.LibraryStorage?.saveGhPrefs) return;
         this.activeTab = "library";
-        LibraryStorage.saveGhPrefs({
+        const saved = LibraryStorage.saveGhPrefs({
           owner: root.querySelector("#ghOwner")?.value || "",
           repo: root.querySelector("#ghRepo")?.value || "",
           token: root.querySelector("#ghToken")?.value || "",
         });
-        setLibStatus("GitHub 配置已保存到本机", "ok");
+        const ownerEl = root.querySelector("#ghOwner");
+        const repoEl = root.querySelector("#ghRepo");
+        if (ownerEl) ownerEl.value = saved.owner;
+        if (repoEl) repoEl.value = saved.repo;
+        setLibStatus(
+          "已保存。将使用仓库：https://github.com/" + saved.owner + "/" + saved.repo,
+          "ok"
+        );
       });
 
       root.querySelector("#ghUploadBtn")?.addEventListener("click", () => {
         if (window.LibraryStorage?.saveGhPrefs) {
-          LibraryStorage.saveGhPrefs({
+          const saved = LibraryStorage.saveGhPrefs({
             owner: root.querySelector("#ghOwner")?.value || "",
             repo: root.querySelector("#ghRepo")?.value || "",
             token: root.querySelector("#ghToken")?.value || "",
           });
+          const ownerEl = root.querySelector("#ghOwner");
+          const repoEl = root.querySelector("#ghRepo");
+          if (ownerEl) ownerEl.value = saved.owner;
+          if (repoEl) repoEl.value = saved.repo;
         }
         root.querySelector("#ghFileInput")?.click();
       });
