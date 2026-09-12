@@ -45,6 +45,7 @@
         <a href="index.html" data-id="home">导航首页</a>
         <a href="library.html" data-id="library" class="active">资源库</a>
         <a href="index.html#settings" data-id="settings">设置</a>
+        ${window.Portal?.mirrorSwitchHtml?.() || ""}
       `;
     },
 

@@ -2,6 +2,47 @@
 (function () {
   const D = () => window.NAV_DATA;
 
+  const MIRRORS = [
+    {
+      id: "cloudflare",
+      short: "CF",
+      name: "Cloudflare Pages",
+      base: "https://cl-nav.pages.dev",
+      match: (host) => /(?:^|\.)pages\.dev$/i.test(host),
+    },
+    {
+      id: "github",
+      short: "GH",
+      name: "GitHub Pages",
+      base: "https://xiaochenbian-new.github.io/cl-nav",
+      match: (host) => /github\.io$/i.test(host),
+    },
+  ];
+
+  function engineIconDomain(eng) {
+    if (eng?.icon) return eng.icon;
+    try {
+      return new URL(eng.url).hostname.replace(/^www\./, "");
+    } catch {
+      return "";
+    }
+  }
+
+  function resolvePageFile() {
+    let path = location.pathname || "/";
+    path = path.replace(/\/cl-nav\/?/i, "/");
+    const parts = path.split("/").filter(Boolean);
+    if (!parts.length) return "index.html";
+    const last = parts[parts.length - 1];
+    if (!last.includes(".")) return "index.html";
+    return last;
+  }
+
+  function mirrorUrl(mirror) {
+    const base = String(mirror.base || "").replace(/\/$/, "");
+    return `${base}/${resolvePageFile()}${location.search || ""}${location.hash || ""}`;
+  }
+
   window.Portal = {
     favicon(domain) {
       return window.navFavicon(domain);
@@ -12,6 +53,142 @@
       return D().engines
         .map((e) => `<option value="${e.id}" ${e.id === cur ? "selected" : ""}>${e.name}</option>`)
         .join("");
+    },
+
+    enginePickerHtml(selected) {
+      const engines = D().engines || [];
+      const curId = selected || localStorage.getItem("cl-nav-engine") || engines[0]?.id;
+      const cur = engines.find((e) => e.id === curId) || engines[0];
+      if (!cur) return "";
+      const curDomain = engineIconDomain(cur);
+      const curIcon = curDomain
+        ? `<img src="${this.favicon(curDomain)}" alt="" data-domain="${curDomain}" data-step="0" decoding="async" referrerpolicy="no-referrer" onerror="Portal.onFaviconError(this)" />`
+        : "";
+      const options = engines
+        .map((e) => {
+          const domain = engineIconDomain(e);
+          const icon = domain
+            ? `<img src="${this.favicon(domain)}" alt="" data-domain="${domain}" data-step="0" decoding="async" referrerpolicy="no-referrer" onerror="Portal.onFaviconError(this)" />`
+            : "";
+          return `<button type="button" class="engine-option" role="option" data-engine="${e.id}" aria-selected="${
+            e.id === cur.id ? "true" : "false"
+          }">${icon}<span>${e.name}</span></button>`;
+        })
+        .join("");
+      return `
+        <div class="engine-picker" id="enginePicker">
+          <input type="hidden" id="engine" value="${cur.id}" />
+          <button type="button" class="engine-trigger" id="engineTrigger" aria-label="搜索引擎" aria-haspopup="listbox" aria-expanded="false">
+            ${curIcon}<span class="engine-label">${cur.name}</span><span class="engine-caret" aria-hidden="true">▾</span>
+          </button>
+          <div class="engine-menu" id="engineMenu" role="listbox" hidden>${options}</div>
+        </div>`;
+    },
+
+    mountEnginePicker(selected) {
+      const host = document.getElementById("enginePickerHost");
+      if (!host) return;
+      host.innerHTML = this.enginePickerHtml(selected);
+      this.hydrateFavicons(host);
+      this.bindEnginePicker();
+    },
+
+    bindEnginePicker() {
+      const picker = document.getElementById("enginePicker");
+      const trigger = document.getElementById("engineTrigger");
+      const menu = document.getElementById("engineMenu");
+      const hidden = document.getElementById("engine");
+      if (!picker || !trigger || !menu || !hidden || picker.dataset.bound === "1") return;
+      picker.dataset.bound = "1";
+
+      const close = () => {
+        menu.hidden = true;
+        trigger.setAttribute("aria-expanded", "false");
+      };
+
+      const open = () => {
+        menu.hidden = false;
+        trigger.setAttribute("aria-expanded", "true");
+      };
+
+      const setEngine = (id) => {
+        const eng = (D().engines || []).find((e) => e.id === id);
+        if (!eng) return;
+        hidden.value = eng.id;
+        localStorage.setItem("cl-nav-engine", eng.id);
+        const domain = engineIconDomain(eng);
+        const label = trigger.querySelector(".engine-label");
+        if (label) label.textContent = eng.name;
+        let img = trigger.querySelector("img");
+        if (domain) {
+          if (!img) {
+            img = document.createElement("img");
+            img.alt = "";
+            img.decoding = "async";
+            img.referrerPolicy = "no-referrer";
+            img.onerror = function () {
+              Portal.onFaviconError(this);
+            };
+            trigger.insertBefore(img, trigger.firstChild);
+          }
+          img.dataset.domain = domain;
+          img.dataset.step = "0";
+          img.dataset.fromCache = "0";
+          img.src = this.favicon(domain);
+        }
+        menu.querySelectorAll(".engine-option").forEach((btn) => {
+          btn.setAttribute("aria-selected", btn.dataset.engine === eng.id ? "true" : "false");
+        });
+        close();
+      };
+
+      trigger.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (menu.hidden) open();
+        else close();
+      });
+
+      menu.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-engine]");
+        if (!btn) return;
+        e.preventDefault();
+        setEngine(btn.dataset.engine);
+      });
+
+      if (!window.__clNavEngineDocBound) {
+        window.__clNavEngineDocBound = true;
+        document.addEventListener("click", (e) => {
+          const p = document.getElementById("enginePicker");
+          const m = document.getElementById("engineMenu");
+          const t = document.getElementById("engineTrigger");
+          if (!p || !m || !t) return;
+          if (!p.contains(e.target)) {
+            m.hidden = true;
+            t.setAttribute("aria-expanded", "false");
+          }
+        });
+        document.addEventListener("keydown", (e) => {
+          if (e.key !== "Escape") return;
+          const m = document.getElementById("engineMenu");
+          const t = document.getElementById("engineTrigger");
+          if (m) m.hidden = true;
+          if (t) t.setAttribute("aria-expanded", "false");
+        });
+      }
+    },
+
+    mirrorSwitchHtml() {
+      const host = typeof location !== "undefined" ? location.hostname : "";
+      const current = MIRRORS.find((m) => m.match(host));
+      if (!current) {
+        return MIRRORS.map(
+          (m) =>
+            `<a class="mirror-switch" href="${mirrorUrl(m)}" title="打开 ${m.name}">${m.short}</a>`
+        ).join("");
+      }
+      const other = MIRRORS.find((m) => m.id !== current.id) || MIRRORS[0];
+      return `<a class="mirror-switch" href="${mirrorUrl(other)}" title="切换到 ${other.name}（当前 ${current.name}）">⇄ ${other.short}</a>`;
     },
 
     hotTags(list) {
@@ -47,7 +224,7 @@
     },
 
     topNav() {
-      return D().navTabs
+      const tabs = (D().navTabs || [])
         .map(
           (t) =>
             `<a href="${t.href || "#"}" data-id="${t.id}" data-action="${t.action || "route"}" data-target="${
@@ -55,6 +232,7 @@
             }">${t.name}</a>`
         )
         .join("");
+      return tabs + this.mirrorSwitchHtml();
     },
 
     iconLinks(list, cls = "site-card") {
@@ -107,7 +285,6 @@
           `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`,
           `https://favicon.im/${encodeURIComponent(domain)}?larger=true`,
         ];
-      // step 0 already failed primary; try next indices
       const next = step + 1;
       if (next < urls.length) {
         img.dataset.step = String(next);
@@ -158,15 +335,28 @@
 
     bindSearch() {
       const form = document.getElementById("searchForm");
-      const engine = document.getElementById("engine");
       if (!form) return;
-      form.addEventListener("submit", (e) => {
-        e.preventDefault();
-        this.doSearch();
-      });
-      engine?.addEventListener("change", () => {
-        localStorage.setItem("cl-nav-engine", engine.value);
-      });
+      if (form.dataset.searchBound !== "1") {
+        form.dataset.searchBound = "1";
+        form.addEventListener("submit", (e) => {
+          e.preventDefault();
+          this.doSearch();
+        });
+      }
+      if (document.getElementById("enginePickerHost")) {
+        this.mountEnginePicker();
+      } else {
+        const engine = document.getElementById("engine");
+        if (engine && engine.tagName === "SELECT") {
+          engine.innerHTML = this.engineOptions();
+          if (engine.dataset.changeBound !== "1") {
+            engine.dataset.changeBound = "1";
+            engine.addEventListener("change", () => {
+              localStorage.setItem("cl-nav-engine", engine.value);
+            });
+          }
+        }
+      }
     },
 
     bindHotTags() {

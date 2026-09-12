@@ -156,6 +156,21 @@
 
     .top-nav a:hover,
     .top-nav a.active { color: var(--accent); }
+    .top-nav .mirror-switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 650;
+      text-decoration: none;
+    }
+    .top-nav .mirror-switch:hover {
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+    }
 
     .lib-hero {
       background: var(--panel);

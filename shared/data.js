@@ -23,27 +23,32 @@ window.NAV_DATA = {
     {
       "id": "baidu",
       "name": "百度",
-      "url": "https://www.baidu.com/s?wd="
+      "url": "https://www.baidu.com/s?wd=",
+      "icon": "www.baidu.com"
     },
     {
       "id": "google",
       "name": "Google",
-      "url": "https://www.google.com/search?q="
+      "url": "https://www.google.com/search?q=",
+      "icon": "www.google.com"
     },
     {
       "id": "bing",
       "name": "必应",
-      "url": "https://www.bing.com/search?q="
+      "url": "https://www.bing.com/search?q=",
+      "icon": "www.bing.com"
     },
     {
       "id": "github",
       "name": "GitHub",
-      "url": "https://github.com/search?q="
+      "url": "https://github.com/search?q=",
+      "icon": "github.com"
     },
     {
       "id": "npm",
       "name": "npm",
-      "url": "https://www.npmjs.com/search?q="
+      "url": "https://www.npmjs.com/search?q=",
+      "icon": "www.npmjs.com"
     }
   ],
   "hotTags": [
