@@ -715,17 +715,22 @@
             </div>
           </section>
 
-          <section class="cfg-lib-section cfg-lib-side-links-admin">
-            <header class="cfg-lib-section-h">
-              <strong>侧栏网盘入口</strong>
-              <span>显示在资源库左侧分类下方</span>
-            </header>
-            <div class="cfg-lib-side-link-list" id="libSideLinkAdmin"></div>
-            <div class="cfg-lib-actions">
-              <button type="button" class="cfg-btn" id="libSideLinkAdd">＋ 添加入口</button>
-              <button type="button" class="cfg-btn primary" id="libSideLinkSave">保存入口</button>
+          <details class="cfg-lib-config cfg-lib-side-links-admin" id="libSideLinksAdminPanel">
+            <summary>侧栏网盘入口</summary>
+            <div class="cfg-lib-config-body">
+              <section class="cfg-lib-section">
+                <header class="cfg-lib-section-h">
+                  <strong>侧栏网盘入口</strong>
+                  <span>显示在资源库左侧分类下方</span>
+                </header>
+                <div class="cfg-lib-side-link-list" id="libSideLinkAdmin"></div>
+                <div class="cfg-lib-actions">
+                  <button type="button" class="cfg-btn" id="libSideLinkAdd">＋ 添加入口</button>
+                  <button type="button" class="cfg-btn primary" id="libSideLinkSave">保存入口</button>
+                </div>
+              </section>
             </div>
-          </section>
+          </details>
           <div class="cfg-lib-upload-dock" id="libUploadDock" hidden></div>
 
           <div class="cfg-lib-list-head">

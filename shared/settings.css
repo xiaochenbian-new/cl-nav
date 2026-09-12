@@ -968,6 +968,14 @@
   margin: 0 0 0.75rem;
 }
 
+.cfg-lib-side-links-admin > summary::after {
+  content: "展开配置";
+}
+
+.cfg-lib-side-links-admin[open] > summary::after {
+  content: "收起配置";
+}
+
 .cfg-lib-side-link-list {
   display: grid;
   gap: 0.35rem;

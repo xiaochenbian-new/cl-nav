@@ -159,11 +159,11 @@
           )
           .join("");
       }
-      // 默认收起；刷新列表时保持用户当前展开状态
+      // 默认展开；刷新列表时保持用户当前展开/收起状态
       if (wrap && !wrap.dataset.inited) {
-        wrap.classList.remove("is-open");
+        wrap.classList.add("is-open");
         wrap.dataset.inited = "1";
-        if (toggle) toggle.setAttribute("aria-expanded", "false");
+        if (toggle) toggle.setAttribute("aria-expanded", "true");
       }
       if (wrap) wrap.hidden = false;
     },
