@@ -35,12 +35,16 @@
   function loadPrefs() {
     try {
       const raw = JSON.parse(localStorage.getItem(PREFS_KEY) || "{}");
+      const defaultProxy = typeof location !== "undefined" && /^https?:$/i.test(location.protocol);
       return {
         baseUrl: raw.baseUrl || "",
         username: raw.username || "",
         password: raw.password || "",
         remotePath: normalizeRemotePath(raw.remotePath || DEFAULT_PATH),
         autoBackup: !!raw.autoBackup,
+        /** Cloudflare Pages 等同源代理，绕过坚果云 CORS */
+        useProxy: raw.useProxy != null ? !!raw.useProxy : defaultProxy,
+        proxyPath: raw.proxyPath || "/api/webdav",
         lastUploadExportedAt: Number(raw.lastUploadExportedAt) || 0,
         remoteNewerSkipAt: Number(raw.remoteNewerSkipAt) || 0,
         localDirty: !!raw.localDirty,
@@ -52,6 +56,8 @@
         password: "",
         remotePath: DEFAULT_PATH,
         autoBackup: false,
+        useProxy: typeof location !== "undefined" && /^https?:$/i.test(location.protocol),
+        proxyPath: "/api/webdav",
         lastUploadExportedAt: 0,
         remoteNewerSkipAt: 0,
         localDirty: false,
@@ -63,6 +69,7 @@
     const cur = loadPrefs();
     const next = { ...cur, ...patch };
     next.remotePath = normalizeRemotePath(next.remotePath);
+    if (next.proxyPath != null) next.proxyPath = String(next.proxyPath).trim() || "/api/webdav";
     localStorage.setItem(PREFS_KEY, JSON.stringify(next));
     return next;
   }
@@ -105,10 +112,33 @@
     };
     if (depth != null) headers.Depth = String(depth);
     if (contentType) headers["Content-Type"] = contentType;
+
+    const prefs = loadPrefs();
+    let fetchUrl = url;
+    if (prefs.useProxy && prefs.proxyPath) {
+      const base = String(prefs.proxyPath).trim() || "/api/webdav";
+      fetchUrl = base + (base.includes("?") ? "&" : "?") + "url=" + encodeURIComponent(url);
+    }
+
     const init = { method, headers };
     if (body != null) init.body = body;
     else if (!/^(GET|HEAD)$/i.test(method)) init.body = "";
-    return fetch(url, init);
+
+    try {
+      return await fetch(fetchUrl, init);
+    } catch (err) {
+      if (prefs.useProxy) {
+        const e = new Error(
+          "无法连接代理 " +
+            prefs.proxyPath +
+            "（请确认 Cloudflare Pages 已部署 functions/api/webdav.js）。原始错误：" +
+            (err && err.message ? err.message : "network")
+        );
+        e.cause = err;
+        throw e;
+      }
+      throw err;
+    }
   }
 
   async function mkcol(url, cfg) {
@@ -313,7 +343,15 @@
     if (saw403) return "连接成功：账号已通过验证（服务器禁止浏览目录，可直接备份）";
     if (saw401) return "测试失败：账号或密码不正确 (HTTP 401)";
     if (sawNetwork) {
-      return "测试失败：无法连接（请检查地址/网络；浏览器直连需服务器允许跨域 CORS）";
+      const prefs = loadPrefs();
+      if (prefs.useProxy) {
+        return (
+          "测试失败：无法经代理连接。请确认已用 Cloudflare Pages 部署（含 functions/api/webdav.js），" +
+          "且代理路径为 " +
+          (prefs.proxyPath || "/api/webdav")
+        );
+      }
+      return "测试失败：无法连接（坚果云等不支持浏览器跨域 CORS；请开启「同源代理」或改用 JSON 备份）";
     }
     return "测试失败：服务器返回异常 (HTTP " + lastCode + ")";
   }

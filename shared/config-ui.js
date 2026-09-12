@@ -352,6 +352,9 @@
             </div>
             <div class="cfg-webdav-row">
               <label class="chk"><input type="checkbox" id="wdAuto" ${wd.autoBackup ? "checked" : ""} /> 自动同步</label>
+              <label class="chk" title="经本站 /api/webdav 转发，解决坚果云 CORS"><input type="checkbox" id="wdProxy" ${
+                wd.useProxy !== false ? "checked" : ""
+              } /> 同源代理（Cloudflare）</label>
               <button type="button" class="cfg-btn" id="wdSave">保存配置</button>
               <button type="button" class="cfg-btn" id="wdTest">测试连接</button>
               <button type="button" class="cfg-btn primary" id="wdSync">立即同步</button>
@@ -363,7 +366,7 @@
                 ? "网盘有更新备份，建议「从网盘恢复」或「立即同步」。"
                 : "同步上传/下载的是当前本地 JSON；删除的分类与网站会随 JSON 一起生效。"
             }</p>
-            <p class="settings-tip">默认路径 /cl-nav/backup.json（与待办应用分开）。浏览器直连需服务器允许跨域；坚果云若失败可用下方 JSON 备份。</p>
+            <p class="settings-tip">坚果云 WebDAV 无浏览器 CORS，部署在 Cloudflare Pages 时请勾选「同源代理」（走 /api/webdav）。仅静态托管（如 GitHub Pages）无法代理，请用下方 JSON 备份。</p>
           </div>
           <div class="cfg-section-divider"></div>
           <div class="cfg-toolbar">
@@ -594,6 +597,8 @@
         password: root.querySelector("#wdPass")?.value || "",
         remotePath: root.querySelector("#wdPath")?.value || "/cl-nav/backup.json",
         autoBackup: !!root.querySelector("#wdAuto")?.checked,
+        useProxy: !!root.querySelector("#wdProxy")?.checked,
+        proxyPath: "/api/webdav",
       });
 
       root.querySelector("#wdSave")?.addEventListener("click", () => {
@@ -612,6 +617,14 @@
       root.querySelector("#wdAuto")?.addEventListener("change", () => {
         if (!window.NavWebDav) return;
         NavWebDav.savePrefs({ autoBackup: !!root.querySelector("#wdAuto").checked });
+      });
+
+      root.querySelector("#wdProxy")?.addEventListener("change", () => {
+        if (!window.NavWebDav) return;
+        NavWebDav.savePrefs({
+          useProxy: !!root.querySelector("#wdProxy").checked,
+          proxyPath: "/api/webdav",
+        });
       });
 
       root.querySelector("#wdTest")?.addEventListener("click", async () => {

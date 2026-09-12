@@ -1,0 +1,7 @@
+# Cloudflare Pages — 启用 Functions（WebDAV 代理）
+name = "cl-nav"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "."
+
+# 若用「直接上传」静态目录，请确保仓库根目录含 functions/api/webdav.js
+# Dashboard 连接 Git 时，构建命令可留空，输出目录填仓库根或你的静态根目录。
