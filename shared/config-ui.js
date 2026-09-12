@@ -176,16 +176,28 @@
     activeTab: "quick",
 
     open() {
-      const panel = document.getElementById("settingsPanel");
-      if (!panel) return;
-      panel.hidden = false;
-      this.render();
+      const go = () => {
+        const panel = document.getElementById("settingsPanel");
+        if (!panel) return;
+        panel.hidden = false;
+        this.render();
+      };
+      if (window.NavAuth?.requireLogin) {
+        NavAuth.requireLogin(go);
+        return;
+      }
+      go();
     },
 
     close() {
       const panel = document.getElementById("settingsPanel");
       if (panel) panel.hidden = true;
       document.getElementById("cfgLinkDialog")?.remove();
+    },
+
+    logout() {
+      if (window.NavAuth?.logout) NavAuth.logout();
+      this.close();
     },
 
     setTab(tab) {
@@ -198,6 +210,7 @@
       root.querySelectorAll(".cfg-pane").forEach((p) => {
         p.hidden = p.dataset.pane !== this.activeTab;
       });
+      if (this.activeTab === "library") this.renderLibraryAdmin(root);
     },
 
     render() {
@@ -227,6 +240,7 @@
         <div class="cfg-tabs" id="cfgTabs">
           <button type="button" data-tab="quick" class="${tab === "quick" ? "active" : ""}">常用网站</button>
           <button type="button" data-tab="cats" class="${tab === "cats" ? "active" : ""}">分类管理</button>
+          <button type="button" data-tab="library" class="${tab === "library" ? "active" : ""}">资源库</button>
           <button type="button" data-tab="data" class="${tab === "data" ? "active" : ""}">备份</button>
           <button type="button" data-tab="theme" class="${tab === "theme" ? "active" : ""}">主题</button>
         </div>
@@ -334,6 +348,18 @@
             </div>
           </div>
         </div>
+        <div class="cfg-pane" data-pane="library" ${tab !== "library" ? "hidden" : ""}>
+          <div class="cfg-toolbar">
+            <strong>资源库管理</strong>
+            <button type="button" class="cfg-btn primary" id="libAdminUpload">＋ 上传资源</button>
+            <input id="libAdminFile" type="file" hidden />
+          </div>
+          <p class="settings-tip" style="margin:0 0 0.5rem">
+            访客在「资源库」页只能下载。上传 / 删除请在此操作（需登录）。存储后端建议用 Cloudflare R2，见页内说明。
+          </p>
+          <p class="cfg-status" id="libAdminStatus"></p>
+          <div class="cfg-list" id="libAdminList"></div>
+        </div>
         <div class="cfg-pane" data-pane="data" ${tab !== "data" ? "hidden" : ""}>
           <div class="cfg-webdav">
             <h4>Cloudflare 云端同步（推荐）</h4>
@@ -419,15 +445,109 @@
               <button type="button" data-theme-btn="dark">☾ 深色</button>
             </div>
           </div>
-          <p class="settings-tip">搜索栏下方是「常用网站」；下方各分类等级相同，均可自由增删与排序。</p>
+          <div class="settings-row" style="margin-top:0.75rem">
+            <span>登录会话</span>
+            <button type="button" class="cfg-btn" id="cfgLogout">退出登录</button>
+          </div>
+          <p class="settings-tip">搜索栏下方是「常用网站」；下方各分类等级相同，均可自由增删与排序。关闭浏览器标签后需重新登录才能进入设置。</p>
         </div>
       `;
 
       this.bind(root);
+      this.renderLibraryAdmin(root);
       if (window.Portal?.bindTheme) Portal.bindTheme();
     },
 
+    async renderLibraryAdmin(root) {
+      const listEl = root?.querySelector("#libAdminList");
+      if (!listEl) return;
+
+      if (!window.LibraryStorage) {
+        listEl.innerHTML = `<p class="settings-tip">未加载资源库模块。</p>`;
+        return;
+      }
+
+      let items = [];
+      try {
+        items = await LibraryStorage.list();
+      } catch (e) {
+        listEl.innerHTML = `<p class="settings-tip">读取失败：${esc(e.message || e)}</p>`;
+        return;
+      }
+
+      const catName = (id) => {
+        const c = (window.LIBRARY_DATA?.categories || []).find((x) => x.id === id);
+        return c ? c.name : id || "未分类";
+      };
+
+      if (!items.length) {
+        listEl.innerHTML = `<p class="settings-tip">暂无资源条目。可点「上传资源」或在 library-data.js 配置。</p>`;
+        return;
+      }
+
+      listEl.innerHTML = items
+        .map(
+          (it) => `
+          <div class="cfg-item">
+            <div class="cfg-item-main">
+              <strong>${esc(it.title)}</strong>
+              <span>${esc(catName(it.category))} · ${esc(it.version || "—")} · ${
+                it.downloadUrl ? "可下载" : "未接下载"
+              }</span>
+            </div>
+            <div class="cfg-item-actions">
+              <button type="button" data-lib-del="${esc(it.id)}">删除</button>
+            </div>
+          </div>`
+        )
+        .join("");
+    },
+
     bind(root) {
+      const setLibStatus = (text, kind = "") => {
+        const el = root.querySelector("#libAdminStatus");
+        if (!el) return;
+        el.textContent = text || "";
+        el.className = "cfg-status" + (kind ? " " + kind : "");
+      };
+
+      root.querySelector("#cfgLogout")?.addEventListener("click", () => {
+        this.logout();
+      });
+
+      root.querySelector("#libAdminUpload")?.addEventListener("click", () => {
+        root.querySelector("#libAdminFile")?.click();
+      });
+
+      root.querySelector("#libAdminFile")?.addEventListener("change", async (e) => {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = "";
+        if (!file || !window.LibraryStorage) return;
+        this.activeTab = "library";
+        setLibStatus("正在上传…");
+        try {
+          await LibraryStorage.upload(file, { title: file.name });
+          setLibStatus("上传成功", "ok");
+          await this.renderLibraryAdmin(root);
+        } catch (err) {
+          setLibStatus(err.message || "上传失败（存储后端待接入）", "err");
+        }
+      });
+
+      root.querySelector("#libAdminList")?.addEventListener("click", async (e) => {
+        const btn = e.target.closest("[data-lib-del]");
+        if (!btn || !window.LibraryStorage) return;
+        if (!confirm("确定删除该资源条目？")) return;
+        this.activeTab = "library";
+        try {
+          await LibraryStorage.remove(btn.dataset.libDel);
+          setLibStatus("已删除", "ok");
+          await this.renderLibraryAdmin(root);
+        } catch (err) {
+          setLibStatus(err.message || "删除失败", "err");
+        }
+      });
+
       root.querySelectorAll(".cfg-tabs [data-tab]").forEach((btn) => {
         btn.addEventListener("click", () => {
           this.activeTab = btn.dataset.tab;

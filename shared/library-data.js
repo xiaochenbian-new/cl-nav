@@ -78,12 +78,46 @@
       );
     },
 
-    async upload(_file, _meta) {
-      throw new Error("上传通道尚未配置（网盘 / 服务器待定）");
+    async upload(file, meta = {}) {
+      if (!file) throw new Error("未选择文件");
+      // 本地占位：仅写入目录元数据，真实文件需接 R2 / 网盘
+      const id = "local_" + Date.now().toString(36);
+      const item = {
+        id,
+        title: meta.title || file.name,
+        desc: meta.desc || "本地登记（文件本体待接云存储）",
+        category: meta.category || "other",
+        version: meta.version || "—",
+        size: file.size ? Math.max(1, Math.round(file.size / 1024)) + " KB" : "—",
+        platform: meta.platform || "—",
+        updatedAt: new Date().toISOString().slice(0, 10),
+        storage: { type: "pending", fileName: file.name },
+        downloadUrl: "",
+        demo: false,
+      };
+      LIBRARY_DATA.items = LIBRARY_DATA.items || [];
+      LIBRARY_DATA.items.unshift(item);
+      try {
+        localStorage.setItem("cl-nav-library-items-v1", JSON.stringify(LIBRARY_DATA.items));
+      } catch (_) {}
+      return item;
     },
 
-    async remove(_id) {
-      throw new Error("删除接口尚未配置");
+    async remove(id) {
+      LIBRARY_DATA.items = (LIBRARY_DATA.items || []).filter((x) => x.id !== id);
+      try {
+        localStorage.setItem("cl-nav-library-items-v1", JSON.stringify(LIBRARY_DATA.items));
+      } catch (_) {}
+      return true;
     },
   };
+
+  // 恢复本机登记的资源目录（不含大文件本体）
+  try {
+    const raw = localStorage.getItem("cl-nav-library-items-v1");
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr) && arr.length) LIBRARY_DATA.items = arr;
+    }
+  } catch (_) {}
 })();

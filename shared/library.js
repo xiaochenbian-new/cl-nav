@@ -168,26 +168,6 @@
         }
       });
 
-      document.getElementById("libUploadBtn")?.addEventListener("click", () => {
-        this.setStatus("上传功能预留中：后续可接 WebDAV 或自建服务器。", "warn");
-        document.getElementById("libFileInput")?.click();
-      });
-
-      document.getElementById("libFileInput")?.addEventListener("change", async (e) => {
-        const file = e.target.files && e.target.files[0];
-        e.target.value = "";
-        if (!file) return;
-        try {
-          await LibraryStorage.upload(file, { title: file.name });
-          this.setStatus("上传成功", "ok");
-          this.items = await LibraryStorage.list();
-          this.renderSide();
-          this.renderList();
-        } catch (err) {
-          this.setStatus(err.message || "上传失败", "err");
-        }
-      });
-
       document.getElementById("backTop")?.addEventListener("click", () => {
         window.scrollTo({ top: 0, behavior: "smooth" });
       });

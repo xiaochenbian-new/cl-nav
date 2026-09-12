@@ -405,8 +405,7 @@
         <div>
           <h1>资源库</h1>
           <p>
-            用于集中存放软件、安装包与常用文件。当前为页面框架：列表 / 分类 / 搜索 / 上传入口已就绪；
-            实际上传与下载通道（网盘 WebDAV 或自建服务器）后续再接入。
+            集中浏览与下载软件、安装包等资源。本页仅提供下载；上传与删除请登录后在「设置 → 资源库」管理。
           </p>
         </div>
         <div class="lib-toolbar">
@@ -414,8 +413,6 @@
             <input id="libSearch" type="search" placeholder="搜索资源名称、说明、平台…" autocomplete="off" />
           </div>
           <span class="lib-badge" id="storageBadge">存储：待定</span>
-          <button type="button" class="lib-btn" id="libUploadBtn">＋ 上传（预留）</button>
-          <input id="libFileInput" type="file" hidden />
         </div>
         <p class="lib-status" id="libStatus"></p>
       </section>
@@ -426,13 +423,13 @@
       </div>
 
       <p class="lib-note">
-        扩展约定：在 <code>shared/library-data.js</code> 配置条目；在 <code>LibraryStorage</code> 实现
-        <code>list / getDownloadUrl / upload</code> 即可切换本地、WebDAV 或服务器，无需改页面结构。
+        管理入口：导航首页 → 设置（需登录）→「资源库」。推荐将安装包存 Cloudflare R2，目录索引走站点同步。
       </p>
     </div>
   </div>
 
   <script src="shared/data.js"></script>
+  <script src="shared/auth.js"></script>
   <script src="shared/portal.js"></script>
   <script src="shared/library-data.js"></script>
   <script src="shared/library.js"></script>
