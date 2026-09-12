@@ -732,9 +732,16 @@
 
     function refreshFromStore() {
       cfg = NavStore.get();
+      // 空分类（损坏/误清空的本地配置）时回退默认，避免整页空白
+      if (!cfg.categories || !cfg.categories.length) {
+        NavStore.reset();
+        cfg = NavStore.get();
+      }
       menuIds = cfg.categories.map((c) => c.id);
       document.getElementById("tagline").textContent = cfg.tagline || "";
-      Portal.mountEnginePicker();
+      try {
+        Portal.mountEnginePicker();
+      } catch (_) {}
       document.getElementById("hotTags").innerHTML = Portal.quickLinks(cfg.quickLinks);
       document.getElementById("sideMenu").innerHTML = Portal.sideMenu(
         cfg.categories,

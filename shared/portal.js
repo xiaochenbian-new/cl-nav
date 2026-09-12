@@ -28,19 +28,27 @@
     }
   }
 
-  function resolvePageFile() {
+  function resolveMirrorPath() {
     let path = location.pathname || "/";
+    // GitHub project pages: /cl-nav/... → relative path under site root
     path = path.replace(/\/cl-nav\/?/i, "/");
     const parts = path.split("/").filter(Boolean);
-    if (!parts.length) return "index.html";
+    if (!parts.length) return "";
     const last = parts[parts.length - 1];
-    if (!last.includes(".")) return "index.html";
-    return last;
+    // 首页不要带 index.html，用目录形式 /
+    if (last === "index.html" || last === "index.htm") {
+      const rest = parts.slice(0, -1);
+      return rest.length ? rest.join("/") + "/" : "";
+    }
+    if (!last.includes(".")) return parts.join("/") + "/";
+    return parts.join("/");
   }
 
   function mirrorUrl(mirror) {
     const base = String(mirror.base || "").replace(/\/$/, "");
-    return `${base}/${resolvePageFile()}${location.search || ""}${location.hash || ""}`;
+    const rel = resolveMirrorPath();
+    const path = rel ? `${base}/${rel}` : `${base}/`;
+    return path + (location.search || "") + (location.hash || "");
   }
 
   window.Portal = {
