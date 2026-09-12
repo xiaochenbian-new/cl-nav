@@ -383,7 +383,8 @@
               <input id="ghFileInput" type="file" hidden />
             </div>
             <p class="settings-tip" style="margin:0">
-              Token 需对目标仓库有写权限（classic 勾选 <code>repo</code>）。可用单独私有仓库存安装包。单文件建议 &lt; 95MB。
+              Token 需对目标仓库有写权限（classic 勾选 <code>repo</code>）。Owner/Repo <strong>不能有空格</strong>，例如
+              <code>xiaochenbian-new</code> / <code>cl-nav-files</code>（先在 GitHub 创建该仓库）。单文件建议 &lt; 95MB。
             </p>
           </div>
           <div class="cfg-section-divider"></div>

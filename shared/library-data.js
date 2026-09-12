@@ -35,8 +35,14 @@
 
   function saveGhPrefs(patch) {
     const next = { ...loadGhPrefs(), ...patch };
-    next.owner = String(next.owner || "").trim().replace(/^@/, "");
-    next.repo = String(next.repo || "").trim();
+    // GitHub 用户名/仓库名不能有空格：xiaochenbian-new / cl-nav-files
+    next.owner = String(next.owner || "")
+      .trim()
+      .replace(/^@/, "")
+      .replace(/\s+/g, "-");
+    next.repo = String(next.repo || "")
+      .trim()
+      .replace(/\s+/g, "-");
     next.token = String(next.token || "").trim();
     localStorage.setItem(GH_PREFS_KEY, JSON.stringify(next));
     return next;
@@ -156,8 +162,18 @@
       }
 
       const gh = { ...loadGhPrefs(), ...(meta.github || {}) };
+      gh.owner = String(gh.owner || "")
+        .trim()
+        .replace(/^@/, "")
+        .replace(/\s+/g, "-");
+      gh.repo = String(gh.repo || "")
+        .trim()
+        .replace(/\s+/g, "-");
       if (!gh.owner || !gh.repo) throw new Error("请先填写并保存 GitHub 仓库 owner / repo");
       if (!gh.token) throw new Error("请先填写并保存 GitHub Token");
+      if (/\s/.test(gh.owner) || /\s/.test(gh.repo)) {
+        throw new Error("Owner / Repo 不能包含空格，请用横杠，例如 xiaochenbian-new / cl-nav-files");
+      }
 
       const fd = new FormData();
       fd.append("file", file, file.name);
