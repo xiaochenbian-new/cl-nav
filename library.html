@@ -134,24 +134,19 @@
       background: var(--accent-soft);
     }
 
-    .lib-side-links-empty {
-      margin: 0;
-      padding: 0.35rem 0.45rem;
-      font-size: 11px;
-      color: var(--muted);
+    .lib-note a {
+      color: var(--accent);
+      font-weight: 650;
+      text-decoration: none;
     }
+    .lib-note a:hover { text-decoration: underline; }
 
     .lib-clock {
-      margin-left: auto;
-      font-size: 12px;
-      font-weight: 650;
-      color: var(--muted);
-      font-variant-numeric: tabular-nums;
-      white-space: nowrap;
-      letter-spacing: 0.01em;
+      display: none;
     }
 
     .lib-home-btn {
+      margin-left: auto;
       flex: 0 0 auto;
       display: inline-flex;
       align-items: center;
@@ -169,6 +164,45 @@
       color: var(--accent);
       border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
       background: var(--accent-soft);
+    }
+
+    .lib-side-links-panel {
+      padding: 0.35rem 0.45rem 0.45rem;
+    }
+
+    .lib-side-links-panel > summary {
+      list-style: none;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--ink);
+      padding: 0.35rem 0.2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.35rem;
+      user-select: none;
+    }
+
+    .lib-side-links-panel > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .lib-side-links-panel > summary::after {
+      content: "▸";
+      color: var(--muted);
+      font-size: 11px;
+      transition: transform 0.15s ease;
+    }
+
+    .lib-side-links-panel[open] > summary::after {
+      transform: rotate(90deg);
+    }
+
+    .lib-side-links-panel .lib-side-links {
+      margin-top: 0.2rem;
+      padding-top: 0.15rem;
+      border-top: 1px solid var(--line);
     }
 
     .shell-main {
@@ -463,6 +497,9 @@
         margin-left: 0;
         width: 100%;
       }
+      .lib-home-btn {
+        margin-left: 0;
+      }
       .shell-main { grid-column: 1; }
       .lib-card { flex-direction: column; align-items: stretch; }
       .lib-card-actions { align-self: flex-end; }
@@ -480,8 +517,6 @@
           </div>
           <span class="tagline">资源库</span>
         </a>
-        <nav class="top-nav" id="topNav" aria-label="主导航"></nav>
-        <time class="lib-clock" id="libClock" datetime=""></time>
         <a class="lib-home-btn" href="index.html">返回首页</a>
       </header>
     </div>
@@ -491,9 +526,10 @@
         <nav class="lib-side" id="libSide" aria-label="资源分类"></nav>
         <button type="button" class="side-top" id="backTop" title="返回顶部">↑ 顶部</button>
       </div>
-      <div class="side-wrap" id="libSideLinksWrap">
+      <details class="side-wrap lib-side-links-panel" id="libSideLinksWrap">
+        <summary>网盘入口</summary>
         <nav class="lib-side-links" id="libSideLinks" aria-label="网盘入口"></nav>
-      </div>
+      </details>
       <div class="side-wrap cfg-lib-upload-dock lib-upload-dock" id="libPageUploadDock" hidden></div>
     </aside>
 
@@ -520,7 +556,8 @@
       </div>
 
       <p class="lib-note">
-        文件可经设置上传到 GitHub Releases，或登记外链。管理：本页点「设置」（需登录）→「资源库」。
+        文件可经设置上传到 GitHub Releases，或登记外链。管理：本页点
+        <a href="#settings" id="libOpenSettings">设置 → 资源库</a>（需登录）。
       </p>
     </div>
   </div>

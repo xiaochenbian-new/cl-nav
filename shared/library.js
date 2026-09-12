@@ -19,29 +19,6 @@
     }
   }
 
-  function pad(n) {
-    return String(n).padStart(2, "0");
-  }
-
-  function formatClock(d = new Date()) {
-    const week = ["日", "一", "二", "三", "四", "五", "六"][d.getDay()];
-    return (
-      d.getFullYear() +
-      "-" +
-      pad(d.getMonth() + 1) +
-      "-" +
-      pad(d.getDate()) +
-      " 周" +
-      week +
-      " " +
-      pad(d.getHours()) +
-      ":" +
-      pad(d.getMinutes()) +
-      ":" +
-      pad(d.getSeconds())
-    );
-  }
-
   function catName(id) {
     const list = window.LibraryStorage?.uiCategories?.() || LIBRARY_DATA.categories || [];
     const c = list.find((x) => x.id === id);
@@ -51,12 +28,9 @@
   window.LibraryUI = {
     filter: { category: "all", q: "" },
     items: [],
-    _clockTimer: 0,
 
     async init() {
-      this.renderNav();
       this.renderToolbar();
-      this.startClock();
       this.bind();
       if (window.LibUploadQueue) {
         const dock = document.getElementById("libPageUploadDock");
@@ -73,30 +47,6 @@
       this.renderSide();
       this.renderSideLinks();
       this.renderList();
-    },
-
-    startClock() {
-      const el = document.getElementById("libClock");
-      if (!el) return;
-      const tick = () => {
-        const now = new Date();
-        el.textContent = formatClock(now);
-        el.dateTime = now.toISOString();
-      };
-      tick();
-      window.clearInterval(this._clockTimer);
-      this._clockTimer = window.setInterval(tick, 1000);
-    },
-
-    renderNav() {
-      const nav = document.getElementById("topNav");
-      if (!nav) return;
-      nav.innerHTML = `
-        <a href="index.html" data-id="home">导航首页</a>
-        <a href="library.html" data-id="library" class="active">资源库</a>
-        <a href="#settings" data-id="settings" data-action="settings">设置</a>
-        ${window.Portal?.mirrorSwitchHtml?.() || ""}
-      `;
     },
 
     openSettings() {
@@ -271,9 +221,7 @@
         window.scrollTo({ top: 0, behavior: "smooth" });
       });
 
-      document.getElementById("topNav")?.addEventListener("click", (e) => {
-        const a = e.target.closest("a[data-action='settings']");
-        if (!a) return;
+      document.getElementById("libOpenSettings")?.addEventListener("click", (e) => {
         e.preventDefault();
         this.openSettings();
       });

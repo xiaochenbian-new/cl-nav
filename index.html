@@ -38,7 +38,7 @@
       grid-column: 1;
       grid-row: 2;
       position: sticky;
-      top: 28vh;
+      top: 0.85rem;
       z-index: 5;
       background: var(--panel);
       border: 1px solid var(--line);
@@ -121,9 +121,20 @@
       display: flex;
       flex-wrap: wrap;
       gap: 0.15rem 0.95rem;
-      margin-left: auto;
+      margin-left: 0;
       font-size: 13px;
       font-weight: 500;
+      align-items: center;
+    }
+
+    .home-clock {
+      margin-left: auto;
+      font-size: 12px;
+      font-weight: 650;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      letter-spacing: 0.01em;
     }
 
     .top-nav a:hover,
@@ -734,6 +745,7 @@
           </div>
           <span class="tagline" id="tagline">开发者工具导航</span>
         </div>
+        <time class="home-clock" id="homeClock" datetime=""></time>
         <nav class="top-nav" id="topNav" aria-label="主导航"></nav>
       </header>
 
@@ -1037,6 +1049,33 @@
       }
     });
 
+    function startHomeClock() {
+      const el = document.getElementById("homeClock");
+      if (!el) return;
+      const pad = (n) => String(n).padStart(2, "0");
+      const week = ["日", "一", "二", "三", "四", "五", "六"];
+      const tick = () => {
+        const d = new Date();
+        el.textContent =
+          d.getFullYear() +
+          "-" +
+          pad(d.getMonth() + 1) +
+          "-" +
+          pad(d.getDate()) +
+          " 周" +
+          week[d.getDay()] +
+          " " +
+          pad(d.getHours()) +
+          ":" +
+          pad(d.getMinutes()) +
+          ":" +
+          pad(d.getSeconds());
+        el.dateTime = d.toISOString();
+      };
+      tick();
+      window.setInterval(tick, 1000);
+    }
+
     NavStore.subscribe(() => {
       const keepCat = activeId;
       const keepMode = selectMode;
@@ -1048,6 +1087,7 @@
       if (!document.getElementById("settingsPanel").hidden) NavConfigUI.render();
     });
 
+    startHomeClock();
     refreshFromStore();
     Portal.bindSearch();
 
