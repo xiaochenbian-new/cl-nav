@@ -226,6 +226,29 @@ export async function onRequest(context) {
         const action = String(body.action || "").trim().toLowerCase();
         const itemId = String(body.id || "").trim();
 
+        if (action === "deleteMany") {
+          const ids = Array.isArray(body.ids)
+            ? body.ids.map((x) => String(x || "").trim()).filter(Boolean)
+            : [];
+          if (!ids.length) return json({ error: "未选择要删除的资源" }, 400, request);
+          const idSet = new Set(ids);
+          const items = await readCatalog(kv);
+          const keep = [];
+          for (const item of items) {
+            if (!item || !idSet.has(item.id)) {
+              keep.push(item);
+              continue;
+            }
+            if (item.storage && item.storage.key && r2 && typeof r2.delete === "function") {
+              try {
+                await r2.delete(item.storage.key);
+              } catch (_) {}
+            }
+          }
+          await writeCatalog(kv, keep);
+          return json({ ok: true, deleted: ids.length }, 200, request);
+        }
+
         if (action === "update" || (itemId && action !== "create")) {
           if (!itemId) return json({ error: "更新缺少 id" }, 400, request);
           const items = await readCatalog(kv);

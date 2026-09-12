@@ -365,5 +365,21 @@
       LIBRARY_DATA.items = (LIBRARY_DATA.items || []).filter((x) => x.id !== id);
       return true;
     },
+
+    async removeMany(ids) {
+      const list = (Array.isArray(ids) ? ids : []).map((x) => String(x || "").trim()).filter(Boolean);
+      if (!list.length) throw new Error("请先勾选要删除的资源");
+      if (!window.NavAuth?.isLoggedIn?.()) throw new Error("请先登录后再删除");
+      const res = await api("POST", {
+        body: JSON.stringify({ action: "deleteMany", ids: list }),
+        headers: authHeaders(true),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.status === 401) throw new Error(j.error || "未授权，请重新登录");
+      if (!res.ok) throw new Error(j.error || "批量删除失败 HTTP " + res.status);
+      const gone = new Set(list);
+      LIBRARY_DATA.items = (LIBRARY_DATA.items || []).filter((x) => !gone.has(x.id));
+      return j.deleted || list.length;
+    },
   };
 })();
