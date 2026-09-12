@@ -150,9 +150,10 @@
     const prefs = loadPrefs();
     if (!prefs.autoSync || !isReady(prefs)) return;
     window.clearTimeout(pushTimer);
+    // 短防抖：连续编辑合并为一次上传，停手后很快推到云端
     pushTimer = window.setTimeout(() => {
       sync("PUSH").catch(() => {});
-    }, 2000);
+    }, 400);
   }
 
   async function sync(mode = "FULL") {
