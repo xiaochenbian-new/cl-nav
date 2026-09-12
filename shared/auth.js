@@ -13,6 +13,10 @@
       }
     },
 
+    adminPass() {
+      return PASS;
+    },
+
     login(username, password) {
       const u = String(username || "").trim();
       const p = String(password || "");

@@ -355,7 +355,10 @@
             <input id="libAdminFile" type="file" hidden />
           </div>
           <p class="settings-tip" style="margin:0 0 0.5rem">
-            访客在「资源库」页只能下载。上传 / 删除请在此操作（需登录）。存储后端建议用 Cloudflare R2，见页内说明。
+            访客在「资源库」页只能下载。上传 / 删除请在此操作（需登录）。文件存 Cloudflare R2，目录索引在 KV。
+          </p>
+          <p class="settings-tip" style="margin:0 0 0.5rem">
+            首次使用：Dashboard → R2 → Create bucket，名称填 <code>cl-nav-library</code>（与 wrangler.toml 一致）后重新部署。单文件建议 &lt; 95MB。
           </p>
           <p class="cfg-status" id="libAdminStatus"></p>
           <div class="cfg-list" id="libAdminList"></div>

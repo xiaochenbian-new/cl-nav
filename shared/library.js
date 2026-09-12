@@ -29,13 +29,19 @@
     items: [],
 
     async init() {
-      this.items = await LibraryStorage.list();
       this.renderNav();
-      this.renderSide();
       this.renderToolbar();
-      this.renderList();
       this.bind();
       if (window.Portal?.bindTheme) Portal.bindTheme();
+      try {
+        this.items = await LibraryStorage.list();
+        this.setStatus(this.items.length ? "" : "云端目录为空，请登录设置上传资源");
+      } catch (err) {
+        this.items = [];
+        this.setStatus(err.message || "无法读取云端目录（请确认已创建 R2 并完成部署）", "err");
+      }
+      this.renderSide();
+      this.renderList();
     },
 
     renderNav() {
@@ -67,19 +73,8 @@
     },
 
     renderToolbar() {
-      const mode = LibraryStorage.mode();
       const badge = document.getElementById("storageBadge");
-      if (badge) {
-        const label =
-          mode === "pending"
-            ? "存储：待定"
-            : mode === "webdav"
-              ? "存储：WebDAV"
-              : mode === "server"
-                ? "存储：服务器"
-                : `存储：${mode}`;
-        badge.textContent = label;
-      }
+      if (badge) badge.textContent = "存储：Cloudflare R2";
     },
 
     filtered() {
