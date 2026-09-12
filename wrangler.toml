@@ -3,9 +3,6 @@ name = "cl-nav"
 compatibility_date = "2024-11-01"
 pages_build_output_dir = "."
 
-# 多端同步：在 Dashboard 绑定同名 KV，或填入下方 id 后用 wrangler 部署
-# 创建：npx wrangler kv namespace create CL_NAV_SYNC
-# 然后把返回的 id 填到这里，并在 Pages → Settings → Functions → KV bindings 绑定名为 CL_NAV_SYNC
-# [[kv_namespaces]]
-# binding = "CL_NAV_SYNC"
-# id = "你的_KV_NAMESPACE_ID"
+[[kv_namespaces]]
+binding = "CL_NAV_SYNC"
+id = "fbfee28c0c54443fb8d4aabc9b68880b"
