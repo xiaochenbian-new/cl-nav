@@ -50,9 +50,32 @@
       nav.innerHTML = `
         <a href="index.html" data-id="home">导航首页</a>
         <a href="library.html" data-id="library" class="active">资源库</a>
-        <a href="index.html#settings" data-id="settings">设置</a>
+        <a href="#settings" data-id="settings" data-action="settings">设置</a>
         ${window.Portal?.mirrorSwitchHtml?.() || ""}
       `;
+    },
+
+    openSettings() {
+      if (!window.NavConfigUI?.open) return;
+      NavConfigUI.open({ tab: "library" });
+    },
+
+    closeSettings() {
+      if (window.NavConfigUI?.close) NavConfigUI.close();
+      if (location.hash === "#settings") {
+        history.replaceState(null, "", location.pathname + location.search);
+      }
+      // 关闭后刷新资源列表（可能刚在设置里改过）
+      this.refreshListQuiet();
+    },
+
+    async refreshListQuiet() {
+      if (!window.LibraryStorage?.list) return;
+      try {
+        this.items = await LibraryStorage.list();
+        this.renderSide();
+        this.renderList();
+      } catch (_) {}
     },
 
     renderSide() {
@@ -181,6 +204,31 @@
       document.getElementById("backTop")?.addEventListener("click", () => {
         window.scrollTo({ top: 0, behavior: "smooth" });
       });
+
+      document.getElementById("topNav")?.addEventListener("click", (e) => {
+        const a = e.target.closest("a[data-action='settings']");
+        if (!a) return;
+        e.preventDefault();
+        this.openSettings();
+      });
+
+      document.getElementById("settingsClose")?.addEventListener("click", () => {
+        this.closeSettings();
+      });
+
+      document.getElementById("settingsPanel")?.addEventListener("click", (e) => {
+        if (e.target.id === "settingsPanel") this.closeSettings();
+      });
+
+      document.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        const panel = document.getElementById("settingsPanel");
+        if (panel && !panel.hidden) this.closeSettings();
+      });
+
+      if (location.hash === "#settings") {
+        setTimeout(() => this.openSettings(), 0);
+      }
     },
   };
 })();

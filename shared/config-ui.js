@@ -176,7 +176,8 @@
     activeTab: "quick",
     libEditingId: "",
 
-    open() {
+    open(opts) {
+      if (opts && opts.tab) this.activeTab = opts.tab;
       const go = () => {
         const panel = document.getElementById("settingsPanel");
         if (!panel) return;
@@ -359,8 +360,8 @@
           </div>
           <p class="cfg-status" id="libAdminStatus" style="min-height:1.25em;margin:0 0 0.55rem"></p>
 
-          <details class="cfg-webdav-details cfg-lib-config" id="libConfigPanel">
-            <summary>配置管理（GitHub / 外链登记）</summary>
+          <details class="cfg-lib-config" id="libConfigPanel">
+            <summary>配置管理 · GitHub 与外链登记</summary>
             <div class="cfg-lib-config-body">
               <div class="cfg-lib-block">
                 <h4>GitHub Releases</h4>
@@ -822,7 +823,7 @@
               links,
             });
             setLibStatus("已保存", "ok");
-            this.libEditingId = id;
+            this.libEditingId = "";
             await this.renderLibraryAdmin(root);
           } catch (err) {
             setLibStatus(err.message || "保存失败", "err");
