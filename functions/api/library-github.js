@@ -191,13 +191,18 @@ export async function onRequest(context) {
     const createBody = await createRes.json().catch(() => ({}));
     if (!createRes.ok) {
       const msg = createBody.message || "创建 Release 失败 HTTP " + createRes.status;
-      const hint =
-        createRes.status === 404
-          ? "（仓库不存在或 Token 无权访问）"
-          : createRes.status === 401 || createRes.status === 403
-            ? "（Token 无效或权限不足，需要 repo / Releases 写权限）"
-            : "";
-      return json({ error: msg + hint, detail: createBody }, createRes.status === 401 ? 401 : 502, request);
+      let hint = "";
+      if (createRes.status === 404) {
+        hint =
+          "。请核对：1) Owner=xiaochenbian-new 2) Repo=cl-nav-file（不要多 s）3) Token 若是 fine-grained，必须勾选该仓库，并给 Contents 读写权限；建议改用 classic 且勾选 repo";
+      } else if (createRes.status === 401 || createRes.status === 403) {
+        hint = "。Token 无效或权限不足：请重新生成 classic token 并勾选 repo，保存后再上传";
+      }
+      return json(
+        { error: msg + hint, detail: createBody, repo: `${owner}/${repo}` },
+        createRes.status === 401 ? 401 : 502,
+        request
+      );
     }
 
     const releaseId = createBody.id;
