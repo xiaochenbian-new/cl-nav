@@ -459,6 +459,7 @@ export async function onRequest(context) {
         assetId: upBody.id,
         fileName,
       },
+      links: [{ url: downloadUrl, channel: "github", label: "GitHub Release" }],
       downloadUrl,
       demo: false,
     };

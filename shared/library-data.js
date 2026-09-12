@@ -101,10 +101,47 @@
     return res;
   }
 
+  const LINK_CHANNELS = [
+    { id: "github", name: "GitHub" },
+    { id: "lanzou", name: "蓝奏云" },
+    { id: "baidu", name: "百度网盘" },
+    { id: "quark", name: "夸克网盘" },
+    { id: "aliyun", name: "阿里云盘" },
+    { id: "direct", name: "直链" },
+    { id: "other", name: "其他" },
+  ];
+
+  function channelName(id) {
+    const hit = LINK_CHANNELS.find((c) => c.id === id);
+    return hit ? hit.name : id || "其他";
+  }
+
+  function itemLinks(item) {
+    if (!item) return [];
+    if (Array.isArray(item.links) && item.links.length) {
+      return item.links
+        .map((l) => ({
+          url: String(l.url || "").trim(),
+          channel: String(l.channel || "other").trim() || "other",
+          label: String(l.label || "").trim(),
+        }))
+        .filter((l) => /^https?:\/\//i.test(l.url) || l.url.startsWith("/api/"));
+    }
+    if (item.downloadUrl) {
+      const ch = item.storage && item.storage.type === "github-release" ? "github" : "direct";
+      return [{ url: item.downloadUrl, channel: ch, label: "" }];
+    }
+    return [];
+  }
+
   window.LibraryStorage = {
     mode() {
       return LIBRARY_DATA.storageMode || "url";
     },
+
+    channels: LINK_CHANNELS,
+    channelName,
+    itemLinks,
 
     async list() {
       const res = await api("GET");
@@ -123,29 +160,52 @@
       return items.slice();
     },
 
-    async getDownloadUrl(item) {
+    async getDownloadUrl(item, link) {
+      if (link?.url) {
+        if (/^https?:\/\//i.test(link.url)) return link.url;
+        if (link.url.startsWith("/")) return link.url;
+      }
+      const links = itemLinks(item);
+      if (links[0]?.url && /^https?:\/\//i.test(links[0].url)) return links[0].url;
       if (item?.downloadUrl && /^https?:\/\//i.test(item.downloadUrl)) return item.downloadUrl;
       if (item?.id) return API + "?id=" + encodeURIComponent(item.id) + "&download=1";
       if (item?.downloadUrl) return item.downloadUrl;
       throw new Error("该资源没有下载地址");
     },
 
-    /** 登记外链（推荐，无需绑卡） */
+    /** 登记外链（可多条） */
     async addLink(meta = {}) {
       if (!window.NavAuth?.isLoggedIn?.()) throw new Error("请先登录后再添加");
-      const downloadUrl = String(meta.downloadUrl || "").trim();
-      if (!/^https?:\/\//i.test(downloadUrl)) {
-        throw new Error("请填写以 http(s):// 开头的下载地址");
+      let links = Array.isArray(meta.links) ? meta.links.slice() : [];
+      if (!links.length && meta.downloadUrl) {
+        links = [
+          {
+            url: meta.downloadUrl,
+            channel: meta.channel || "direct",
+            label: meta.linkLabel || "",
+          },
+        ];
       }
+      links = links
+        .map((l) => ({
+          url: String(l.url || "").trim(),
+          channel: String(l.channel || "other").trim() || "other",
+          label: String(l.label || "").trim(),
+        }))
+        .filter((l) => /^https?:\/\//i.test(l.url));
+      if (!links.length) throw new Error("请填写至少一个以 http(s):// 开头的下载地址");
+
       const res = await api("POST", {
         body: JSON.stringify({
+          action: "create",
           title: meta.title || "未命名资源",
           desc: meta.desc || "",
           category: meta.category || "other",
           version: meta.version || "—",
           size: meta.size || "—",
           platform: meta.platform || "—",
-          downloadUrl,
+          links,
+          downloadUrl: links[0].url,
         }),
         headers: authHeaders(true),
       });
@@ -155,6 +215,34 @@
       if (j.item) {
         LIBRARY_DATA.items = LIBRARY_DATA.items || [];
         LIBRARY_DATA.items.unshift(j.item);
+      }
+      return j.item;
+    },
+
+    /** 更新说明 / 外链等 */
+    async update(id, patch = {}) {
+      if (!id) throw new Error("缺少 id");
+      if (!window.NavAuth?.isLoggedIn?.()) throw new Error("请先登录后再保存");
+      const body = { action: "update", id, ...patch };
+      if (Array.isArray(patch.links)) {
+        body.links = patch.links
+          .map((l) => ({
+            url: String(l.url || "").trim(),
+            channel: String(l.channel || "other").trim() || "other",
+            label: String(l.label || "").trim(),
+          }))
+          .filter((l) => /^https?:\/\//i.test(l.url) || String(l.url || "").startsWith("/api/"));
+        if (!body.links.length) throw new Error("请至少保留一个有效外链");
+      }
+      const res = await api("POST", {
+        body: JSON.stringify(body),
+        headers: authHeaders(true),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.status === 401) throw new Error(j.error || "未授权，请重新登录");
+      if (!res.ok) throw new Error(j.error || "保存失败 HTTP " + res.status);
+      if (j.item) {
+        LIBRARY_DATA.items = (LIBRARY_DATA.items || []).map((x) => (x.id === id ? j.item : x));
       }
       return j.item;
     },

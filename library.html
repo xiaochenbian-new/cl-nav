@@ -315,7 +315,25 @@
       color: var(--muted);
       background: var(--bg);
     }
-    .lib-card-actions { flex-shrink: 0; }
+    .lib-card-actions {
+      flex-shrink: 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      justify-content: flex-end;
+      max-width: 42%;
+    }
+
+    @media (max-width: 720px) {
+      .lib-card {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .lib-card-actions {
+        max-width: none;
+        justify-content: flex-start;
+      }
+    }
 
     .lib-empty {
       padding: 2.2rem 1rem;
@@ -431,8 +449,8 @@
   <script src="shared/data.js"></script>
   <script src="shared/auth.js"></script>
   <script src="shared/portal.js"></script>
-  <script src="shared/library-data.js?v=20260328c"></script>
-  <script src="shared/library.js"></script>
+  <script src="shared/library-data.js?v=20260328d"></script>
+  <script src="shared/library.js?v=20260328d"></script>
   <script>
     LibraryUI.init();
   </script>

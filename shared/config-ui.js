@@ -174,6 +174,7 @@
   window.NavConfigUI = {
     selectedCatId: "",
     activeTab: "quick",
+    libEditingId: "",
 
     open() {
       const go = () => {
@@ -349,78 +350,98 @@
           </div>
         </div>
         <div class="cfg-pane" data-pane="library" ${tab !== "library" ? "hidden" : ""}>
-          <div class="cfg-toolbar">
-            <strong>资源库管理</strong>
-          </div>
-          <p class="settings-tip" style="margin:0 0 0.5rem">
-            推荐：配置 GitHub 后先点「测试连接」，再点蓝色按钮选文件上传。成功后目录会自动出现条目。
-          </p>
-          <p class="cfg-status" id="libAdminStatus" style="min-height:1.25em;margin:0 0 0.55rem"></p>
-          <div class="cfg-webdav" style="box-shadow:none;border:0;padding:0;margin:0 0 0.75rem">
-            <h4 style="margin:0 0 0.45rem;font-size:13px">GitHub Releases 上传</h4>
-            <div class="cfg-webdav-grid" style="margin-bottom:0.55rem">
-              <label>
-                <span>仓库 Owner</span>
-                <input type="text" id="ghOwner" placeholder="xiaochenbian-new" value="${esc(
-                  (window.LibraryStorage?.loadGhPrefs?.() || {}).owner || "xiaochenbian-new"
-                )}" autocomplete="off" spellcheck="false" />
-              </label>
-              <label>
-                <span>仓库名 Repo</span>
-                <input type="text" id="ghRepo" placeholder="cl-nav-file" value="${esc(
-                  (window.LibraryStorage?.loadGhPrefs?.() || {}).repo || "cl-nav-file"
-                )}" autocomplete="off" spellcheck="false" />
-              </label>
-              <label style="grid-column:1/-1">
-                <span>GitHub Token（仅保存在本机浏览器）</span>
-                <input type="password" id="ghToken" placeholder="ghp_... 或 github_pat_..." value="${esc(
-                  (window.LibraryStorage?.loadGhPrefs?.() || {}).token || ""
-                )}" autocomplete="off" />
-              </label>
-            </div>
-            <div class="cfg-webdav-row" style="margin-bottom:0.45rem;flex-wrap:wrap">
-              <button type="button" class="cfg-btn" id="ghSavePrefs">保存 GitHub 配置</button>
-              <button type="button" class="cfg-btn" id="ghTestBtn">测试连接</button>
-              <button type="button" class="cfg-btn primary" id="ghUploadBtn">选择文件并上传到 Release</button>
+          <div class="cfg-toolbar cfg-lib-toolbar">
+            <strong>资源库</strong>
+            <div class="cfg-item-actions">
+              <button type="button" class="cfg-btn primary" id="ghUploadBtn">上传到 Release</button>
               <input id="ghFileInput" type="file" hidden />
             </div>
-            <p class="settings-tip" style="margin:0">
-              Token 需 classic 勾选 <code>repo</code>。仓库填
-              <code>xiaochenbian-new</code> / <code>cl-nav-file</code>（中间是横杠 <code>-</code>，不是空格）。单文件建议 &lt; 95MB。
-            </p>
           </div>
-          <div class="cfg-section-divider"></div>
-          <div class="cfg-webdav" style="box-shadow:none;border:0;padding:0;margin:0 0 0.35rem">
-            <h4 style="margin:0 0 0.45rem;font-size:13px">添加外链（可选）</h4>
-          <div class="cfg-webdav-grid" style="margin-bottom:0.65rem">
-            <label>
-              <span>名称</span>
-              <input type="text" id="libLinkTitle" placeholder="例如 JDK 安装包" autocomplete="off" />
-            </label>
-            <label>
-              <span>下载地址</span>
-              <input type="text" id="libLinkUrl" placeholder="https://..." autocomplete="off" spellcheck="false" />
-            </label>
-            <label>
-              <span>分类</span>
-              <select id="libLinkCat">
-                <option value="software">软件</option>
-                <option value="installer">安装包</option>
-                <option value="docs">文档</option>
-                <option value="driver">驱动</option>
-                <option value="other" selected>其他</option>
-              </select>
-            </label>
-            <label>
-              <span>备注</span>
-              <input type="text" id="libLinkDesc" placeholder="可选" autocomplete="off" />
-            </label>
+          <p class="cfg-status" id="libAdminStatus" style="min-height:1.25em;margin:0 0 0.55rem"></p>
+
+          <details class="cfg-webdav-details cfg-lib-config" id="libConfigPanel">
+            <summary>配置管理（GitHub / 外链登记）</summary>
+            <div class="cfg-lib-config-body">
+              <div class="cfg-lib-block">
+                <h4>GitHub Releases</h4>
+                <div class="cfg-webdav-grid" style="margin-bottom:0.55rem">
+                  <label>
+                    <span>仓库 Owner</span>
+                    <input type="text" id="ghOwner" placeholder="xiaochenbian-new" value="${esc(
+                      (window.LibraryStorage?.loadGhPrefs?.() || {}).owner || "xiaochenbian-new"
+                    )}" autocomplete="off" spellcheck="false" />
+                  </label>
+                  <label>
+                    <span>仓库名 Repo</span>
+                    <input type="text" id="ghRepo" placeholder="cl-nav-file" value="${esc(
+                      (window.LibraryStorage?.loadGhPrefs?.() || {}).repo || "cl-nav-file"
+                    )}" autocomplete="off" spellcheck="false" />
+                  </label>
+                  <label style="grid-column:1/-1">
+                    <span>GitHub Token（仅本机）</span>
+                    <input type="password" id="ghToken" placeholder="ghp_... 勾选 repo" value="${esc(
+                      (window.LibraryStorage?.loadGhPrefs?.() || {}).token || ""
+                    )}" autocomplete="off" />
+                  </label>
+                </div>
+                <div class="cfg-webdav-row" style="margin-bottom:0.35rem;flex-wrap:wrap">
+                  <button type="button" class="cfg-btn" id="ghSavePrefs">保存配置</button>
+                  <button type="button" class="cfg-btn" id="ghTestBtn">测试连接</button>
+                </div>
+                <p class="settings-tip" style="margin:0">
+                  仓库示例 <code>xiaochenbian-new</code> / <code>cl-nav-file</code> · 单文件建议 &lt; 95MB
+                </p>
+              </div>
+              <div class="cfg-lib-block">
+                <h4>快速登记外链资源</h4>
+                <div class="cfg-webdav-grid" style="margin-bottom:0.55rem">
+                  <label>
+                    <span>名称</span>
+                    <input type="text" id="libLinkTitle" placeholder="例如 JDK 安装包" autocomplete="off" />
+                  </label>
+                  <label>
+                    <span>分类</span>
+                    <select id="libLinkCat">
+                      <option value="software">软件</option>
+                      <option value="installer">安装包</option>
+                      <option value="docs">文档</option>
+                      <option value="driver">驱动</option>
+                      <option value="other" selected>其他</option>
+                    </select>
+                  </label>
+                  <label style="grid-column:1/-1">
+                    <span>说明</span>
+                    <input type="text" id="libLinkDesc" placeholder="可选，上传后也可再编辑" autocomplete="off" />
+                  </label>
+                  <label>
+                    <span>渠道</span>
+                    <select id="libLinkChannel">
+                      <option value="direct">直链</option>
+                      <option value="github">GitHub</option>
+                      <option value="lanzou">蓝奏云</option>
+                      <option value="baidu">百度网盘</option>
+                      <option value="quark">夸克网盘</option>
+                      <option value="aliyun">阿里云盘</option>
+                      <option value="other">其他</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>下载地址</span>
+                    <input type="text" id="libLinkUrl" placeholder="https://..." autocomplete="off" spellcheck="false" />
+                  </label>
+                </div>
+                <div class="cfg-webdav-row">
+                  <button type="button" class="cfg-btn" id="libAdminAddLink">添加外链资源</button>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <div class="cfg-lib-list-head">
+            <strong>已上传资源</strong>
+            <span class="settings-tip">可编辑说明与多个下载渠道</span>
           </div>
-          <div class="cfg-webdav-row" style="margin-bottom:0.55rem">
-            <button type="button" class="cfg-btn" id="libAdminAddLink">添加外链资源</button>
-          </div>
-          </div>
-          <div class="cfg-list" id="libAdminList"></div>
+          <div class="cfg-list cfg-lib-list" id="libAdminList"></div>
         </div>
         <div class="cfg-pane" data-pane="data" ${tab !== "data" ? "hidden" : ""}>
           <div class="cfg-webdav">
@@ -541,27 +562,95 @@
         const c = (window.LIBRARY_DATA?.categories || []).find((x) => x.id === id);
         return c ? c.name : id || "未分类";
       };
+      const channels = LibraryStorage.channels || [];
+      const channelOpts = (selected) =>
+        channels
+          .map(
+            (c) =>
+              `<option value="${esc(c.id)}" ${c.id === selected ? "selected" : ""}>${esc(c.name)}</option>`
+          )
+          .join("");
 
       if (!items.length) {
-        listEl.innerHTML = `<p class="settings-tip">（提示，不是错误）目录里还没有资源。请先「测试连接」，再点蓝色按钮选择文件上传。</p>`;
+        listEl.innerHTML = `<p class="settings-tip">还没有资源。展开上方「配置管理」测试连接后，点「上传到 Release」；或登记外链。</p>`;
         return;
       }
 
       listEl.innerHTML = items
-        .map(
-          (it) => `
-          <div class="cfg-item">
-            <div class="cfg-item-main">
-              <strong>${esc(it.title)}</strong>
-              <span>${esc(catName(it.category))} · ${esc(it.version || "—")} · ${
-                it.downloadUrl ? "可下载" : "未接下载"
-              }</span>
+        .map((it) => {
+          const open = this.libEditingId === it.id;
+          const links = LibraryStorage.itemLinks(it);
+          const linkPreview = links.length
+            ? links
+                .map((l) => LibraryStorage.channelName(l.channel) + (l.label ? `·${l.label}` : ""))
+                .join(" / ")
+            : "无外链";
+          const linkRows = (links.length ? links : [{ url: "", channel: "direct", label: "" }])
+            .map(
+              (l, i) => `
+              <div class="cfg-lib-link-row" data-link-row>
+                <select data-link-channel aria-label="渠道">${channelOpts(l.channel || "direct")}</select>
+                <input type="text" data-link-url placeholder="https://..." value="${esc(l.url || "")}" spellcheck="false" />
+                <input type="text" data-link-label placeholder="备注" value="${esc(l.label || "")}" />
+                <button type="button" class="cfg-btn" data-link-remove title="移除">×</button>
+              </div>`
+            )
+            .join("");
+
+          const catOpts = (window.LIBRARY_DATA?.categories || [])
+            .filter((c) => c.id !== "all")
+            .map(
+              (c) =>
+                `<option value="${esc(c.id)}" ${c.id === it.category ? "selected" : ""}>${esc(c.name)}</option>`
+            )
+            .join("");
+
+          return `
+          <div class="cfg-lib-card ${open ? "is-open" : ""}" data-lib-card="${esc(it.id)}">
+            <div class="cfg-lib-card-head">
+              <div class="cfg-item-main">
+                <strong>${esc(it.title)}</strong>
+                <span>${esc(catName(it.category))} · ${esc(it.size || "—")} · ${esc(linkPreview)}</span>
+              </div>
+              <div class="cfg-item-actions">
+                <button type="button" data-lib-edit="${esc(it.id)}">${open ? "收起" : "编辑"}</button>
+                <button type="button" data-lib-del="${esc(it.id)}">删除</button>
+              </div>
             </div>
-            <div class="cfg-item-actions">
-              <button type="button" data-lib-del="${esc(it.id)}">删除</button>
-            </div>
-          </div>`
-        )
+            ${
+              open
+                ? `<div class="cfg-lib-card-body">
+              <div class="cfg-webdav-grid">
+                <label>
+                  <span>名称</span>
+                  <input type="text" data-edit-title value="${esc(it.title || "")}" />
+                </label>
+                <label>
+                  <span>分类</span>
+                  <select data-edit-cat>${catOpts}</select>
+                </label>
+                <label style="grid-column:1/-1">
+                  <span>说明</span>
+                  <textarea data-edit-desc rows="2" placeholder="资源说明，展示在资源库页面">${esc(
+                    it.desc || ""
+                  )}</textarea>
+                </label>
+              </div>
+              <div class="cfg-lib-links">
+                <div class="cfg-lib-links-head">
+                  <strong>下载外链</strong>
+                  <button type="button" class="cfg-btn" data-link-add="${esc(it.id)}">＋ 添加渠道</button>
+                </div>
+                <div class="cfg-lib-link-list" data-link-list>${linkRows}</div>
+              </div>
+              <div class="cfg-webdav-row" style="margin-top:0.55rem">
+                <button type="button" class="cfg-btn primary" data-lib-save="${esc(it.id)}">保存修改</button>
+              </div>
+            </div>`
+                : ""
+            }
+          </div>`;
+        })
         .join("");
     },
 
@@ -638,7 +727,8 @@
             desc: root.querySelector("#libLinkDesc")?.value || "",
             category,
           });
-          setLibStatus("上传成功：" + (item?.title || file.name), "ok");
+          setLibStatus("上传成功：" + (item?.title || file.name) + " —— 可点「编辑」补充说明与多渠道外链", "ok");
+          this.libEditingId = item?.id || "";
           await this.renderLibraryAdmin(root);
         } catch (err) {
           setLibStatus(err.message || "GitHub 上传失败", "err");
@@ -652,9 +742,10 @@
         const downloadUrl = root.querySelector("#libLinkUrl")?.value || "";
         const category = root.querySelector("#libLinkCat")?.value || "other";
         const desc = root.querySelector("#libLinkDesc")?.value || "";
+        const channel = root.querySelector("#libLinkChannel")?.value || "direct";
         setLibStatus("正在添加…");
         try {
-          await LibraryStorage.addLink({ title, downloadUrl, category, desc });
+          await LibraryStorage.addLink({ title, downloadUrl, category, desc, channel });
           setLibStatus("已添加", "ok");
           const urlInput = root.querySelector("#libLinkUrl");
           const titleInput = root.querySelector("#libLinkTitle");
@@ -667,12 +758,85 @@
       });
 
       root.querySelector("#libAdminList")?.addEventListener("click", async (e) => {
+        const editBtn = e.target.closest("[data-lib-edit]");
+        if (editBtn) {
+          const id = editBtn.dataset.libEdit;
+          this.libEditingId = this.libEditingId === id ? "" : id;
+          this.activeTab = "library";
+          await this.renderLibraryAdmin(root);
+          return;
+        }
+
+        const addLinkBtn = e.target.closest("[data-link-add]");
+        if (addLinkBtn) {
+          const card = addLinkBtn.closest("[data-lib-card]");
+          const list = card?.querySelector("[data-link-list]");
+          if (!list) return;
+          const channels = window.LibraryStorage?.channels || [];
+          const opts = channels
+            .map((c) => `<option value="${esc(c.id)}" ${c.id === "direct" ? "selected" : ""}>${esc(c.name)}</option>`)
+            .join("");
+          const row = document.createElement("div");
+          row.className = "cfg-lib-link-row";
+          row.dataset.linkRow = "";
+          row.innerHTML = `
+            <select data-link-channel aria-label="渠道">${opts}</select>
+            <input type="text" data-link-url placeholder="https://..." spellcheck="false" />
+            <input type="text" data-link-label placeholder="备注" />
+            <button type="button" class="cfg-btn" data-link-remove title="移除">×</button>`;
+          list.appendChild(row);
+          return;
+        }
+
+        if (e.target.closest("[data-link-remove]")) {
+          const row = e.target.closest("[data-link-row]");
+          const list = row?.parentElement;
+          if (row && list) {
+            if (list.querySelectorAll("[data-link-row]").length <= 1) {
+              row.querySelector("[data-link-url]").value = "";
+              row.querySelector("[data-link-label]").value = "";
+            } else {
+              row.remove();
+            }
+          }
+          return;
+        }
+
+        const saveBtn = e.target.closest("[data-lib-save]");
+        if (saveBtn && window.LibraryStorage?.update) {
+          const id = saveBtn.dataset.libSave;
+          const card = saveBtn.closest("[data-lib-card]");
+          if (!card) return;
+          const links = [...card.querySelectorAll("[data-link-row]")].map((row) => ({
+            channel: row.querySelector("[data-link-channel]")?.value || "other",
+            url: row.querySelector("[data-link-url]")?.value || "",
+            label: row.querySelector("[data-link-label]")?.value || "",
+          }));
+          this.activeTab = "library";
+          setLibStatus("正在保存…");
+          try {
+            await LibraryStorage.update(id, {
+              title: card.querySelector("[data-edit-title]")?.value || "",
+              desc: card.querySelector("[data-edit-desc]")?.value || "",
+              category: card.querySelector("[data-edit-cat]")?.value || "other",
+              links,
+            });
+            setLibStatus("已保存", "ok");
+            this.libEditingId = id;
+            await this.renderLibraryAdmin(root);
+          } catch (err) {
+            setLibStatus(err.message || "保存失败", "err");
+          }
+          return;
+        }
+
         const btn = e.target.closest("[data-lib-del]");
         if (!btn || !window.LibraryStorage) return;
         if (!confirm("确定删除该资源条目？")) return;
         this.activeTab = "library";
         try {
           await LibraryStorage.remove(btn.dataset.libDel);
+          if (this.libEditingId === btn.dataset.libDel) this.libEditingId = "";
           setLibStatus("已删除", "ok");
           await this.renderLibraryAdmin(root);
         } catch (err) {

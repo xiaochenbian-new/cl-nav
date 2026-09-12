@@ -3,8 +3,8 @@
  * 不依赖 R2 / 绑卡：文件放外链（GitHub Releases、网盘等），这里只存目录。
  *
  * - GET                  列出目录
- * - GET ?id=&download=1  302 跳转到 downloadUrl
- * - POST JSON            登记外链资源（需鉴权）
+ * - GET ?id=&download=1  302 跳转到主下载地址
+ * - POST JSON            登记外链 / 更新资源（需鉴权）
  * - DELETE ?id=          删除（需鉴权）
  *
  * 绑定：CL_NAV_SYNC（KV）
@@ -12,6 +12,7 @@
  */
 const CATALOG_KEY = "library:catalog";
 const DEFAULT_ADMIN = "xiaochenbian";
+const LINK_CHANNELS = new Set(["github", "lanzou", "baidu", "quark", "aliyun", "direct", "other"]);
 
 function cors(req) {
   const origin = req.headers.get("Origin") || "*";
@@ -64,6 +65,54 @@ function formatSize(bytes) {
   return (n / (1024 * 1024 * 1024)).toFixed(2) + " GB";
 }
 
+function normalizeLink(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const url = String(raw.url || raw.href || "").trim();
+  if (!/^https?:\/\//i.test(url) && !url.startsWith("/api/")) return null;
+  let channel = String(raw.channel || "other").trim().toLowerCase() || "other";
+  if (!LINK_CHANNELS.has(channel)) channel = "other";
+  const label = String(raw.label || "").trim().slice(0, 40);
+  return { url, channel, label };
+}
+
+function normalizeLinks(input, fallbackUrl, defaultChannel) {
+  let links = [];
+  if (Array.isArray(input)) {
+    links = input.map(normalizeLink).filter(Boolean);
+  }
+  const single = String(fallbackUrl || "").trim();
+  if (!links.length && (/^https?:\/\//i.test(single) || single.startsWith("/api/"))) {
+    links = [
+      {
+        url: single,
+        channel: LINK_CHANNELS.has(defaultChannel) ? defaultChannel : "direct",
+        label: "",
+      },
+    ];
+  }
+  return links.slice(0, 20);
+}
+
+function primaryUrl(item) {
+  if (!item) return "";
+  if (item.downloadUrl && (/^https?:\/\//i.test(item.downloadUrl) || String(item.downloadUrl).startsWith("/api/"))) {
+    return item.downloadUrl;
+  }
+  const links = Array.isArray(item.links) ? item.links : [];
+  const hit = links.find(
+    (l) => l && (/^https?:\/\//i.test(l.url) || String(l.url || "").startsWith("/api/"))
+  );
+  return hit ? hit.url : "";
+}
+
+function withNormalized(it) {
+  if (!it || !it.id) return it;
+  const defaultChannel = it.storage && it.storage.type === "github-release" ? "github" : "direct";
+  const links = normalizeLinks(it.links, it.downloadUrl, defaultChannel);
+  const downloadUrl = primaryUrl({ ...it, links }) || it.downloadUrl || "";
+  return { ...it, links, downloadUrl };
+}
+
 async function readCatalog(kv) {
   if (!kv) return [];
   const raw = await kv.get(CATALOG_KEY);
@@ -88,12 +137,6 @@ async function writeCatalog(kv, items) {
   );
 }
 
-function withDownloadUrl(it) {
-  if (!it || !it.id) return it;
-  if (it.downloadUrl) return { ...it, downloadUrl: it.downloadUrl };
-  return { ...it, downloadUrl: `/api/library?id=${encodeURIComponent(it.id)}&download=1` };
-}
-
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -114,15 +157,14 @@ export async function onRequest(context) {
   try {
     if (request.method === "GET" && id && wantDownload) {
       const items = await readCatalog(kv);
-      const item = items.find((x) => x && x.id === id);
+      const item = withNormalized(items.find((x) => x && x.id === id));
       if (!item) return json({ error: "资源不存在" }, 404, request);
 
-      // 外链：302 跳转
-      if (item.downloadUrl && /^https?:\/\//i.test(item.downloadUrl)) {
-        return Response.redirect(item.downloadUrl, 302);
+      const jump = primaryUrl(item);
+      if (jump && /^https?:\/\//i.test(jump)) {
+        return Response.redirect(jump, 302);
       }
 
-      // 可选 R2
       const key = item.storage && item.storage.key;
       if (key && r2 && typeof r2.get === "function") {
         const obj = await r2.get(key);
@@ -130,7 +172,10 @@ export async function onRequest(context) {
         const headers = new Headers(cors(request));
         const fileName = (item.storage && item.storage.fileName) || item.title || "download";
         headers.set("Content-Type", obj.httpMetadata?.contentType || "application/octet-stream");
-        headers.set("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+        headers.set(
+          "Content-Disposition",
+          `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`
+        );
         if (obj.size != null) headers.set("Content-Length", String(obj.size));
         return new Response(obj.body, { status: 200, headers });
       }
@@ -144,7 +189,7 @@ export async function onRequest(context) {
         {
           ok: true,
           storageMode: r2 ? "r2+url" : "url",
-          items: items.map(withDownloadUrl),
+          items: items.map(withNormalized),
         },
         200,
         request
@@ -174,18 +219,53 @@ export async function onRequest(context) {
 
       const ct = request.headers.get("Content-Type") || "";
 
-      // 方式 A：JSON 登记外链（无需 R2 / 绑卡）
       if (/application\/json/i.test(ct)) {
         const body = await request.json().catch(() => null);
         if (!body || typeof body !== "object") return json({ error: "JSON 无效" }, 400, request);
-        const downloadUrl = String(body.downloadUrl || "").trim();
-        if (!/^https?:\/\//i.test(downloadUrl)) {
-          return json({ error: "请填写以 http(s):// 开头的下载地址" }, 400, request);
+
+        const action = String(body.action || "").trim().toLowerCase();
+        const itemId = String(body.id || "").trim();
+
+        if (action === "update" || (itemId && action !== "create")) {
+          if (!itemId) return json({ error: "更新缺少 id" }, 400, request);
+          const items = await readCatalog(kv);
+          const idx = items.findIndex((x) => x && x.id === itemId);
+          if (idx < 0) return json({ error: "资源不存在" }, 404, request);
+          const cur = items[idx];
+          const next = { ...cur };
+
+          if (body.title != null) next.title = String(body.title || "").trim() || cur.title || "未命名资源";
+          if (body.desc != null) next.desc = String(body.desc || "").trim();
+          if (body.category != null) next.category = String(body.category || "other").trim() || "other";
+          if (body.version != null) next.version = String(body.version || "—").trim() || "—";
+          if (body.platform != null) next.platform = String(body.platform || "—").trim() || "—";
+          if (body.size != null) next.size = String(body.size || "—").trim() || "—";
+
+          if (body.links != null || body.downloadUrl != null) {
+            const defaultChannel =
+              cur.storage && cur.storage.type === "github-release" ? "github" : "direct";
+            const links = normalizeLinks(body.links, body.downloadUrl, defaultChannel);
+            if (!links.length) {
+              return json({ error: "请至少保留一个有效外链（http/https）" }, 400, request);
+            }
+            next.links = links;
+            next.downloadUrl = links[0].url;
+          }
+
+          next.updatedAt = new Date().toISOString().slice(0, 10);
+          items[idx] = next;
+          await writeCatalog(kv, items);
+          return json({ ok: true, item: withNormalized(next) }, 200, request);
         }
-        const itemId = newId();
+
+        const links = normalizeLinks(body.links, body.downloadUrl, String(body.channel || "direct"));
+        if (!links.length) {
+          return json({ error: "请填写至少一个以 http(s):// 开头的下载地址" }, 400, request);
+        }
+        const newItemId = newId();
         const title = String(body.title || "").trim() || "未命名资源";
         const item = {
-          id: itemId,
+          id: newItemId,
           title,
           desc: String(body.desc || "").trim(),
           category: String(body.category || "other").trim() || "other",
@@ -194,16 +274,16 @@ export async function onRequest(context) {
           platform: String(body.platform || "—").trim() || "—",
           updatedAt: new Date().toISOString().slice(0, 10),
           storage: { type: "url" },
-          downloadUrl,
+          links,
+          downloadUrl: links[0].url,
           demo: false,
         };
         const items = await readCatalog(kv);
         items.unshift(item);
         await writeCatalog(kv, items);
-        return json({ ok: true, item: withDownloadUrl(item) }, 200, request);
+        return json({ ok: true, item: withNormalized(item) }, 200, request);
       }
 
-      // 方式 B：multipart 真上传（仅当已绑定 R2）
       if (/multipart\/form-data/i.test(ct)) {
         if (!r2 || typeof r2.put !== "function") {
           return json(
@@ -231,6 +311,7 @@ export async function onRequest(context) {
         await r2.put(key, buf, {
           httpMetadata: { contentType: file.type || "application/octet-stream" },
         });
+        const downloadUrl = `/api/library?id=${encodeURIComponent(itemId)}&download=1`;
         const item = {
           id: itemId,
           title: String(form.get("title") || fileName).trim() || fileName,
@@ -241,13 +322,14 @@ export async function onRequest(context) {
           platform: String(form.get("platform") || "—").trim() || "—",
           updatedAt: new Date().toISOString().slice(0, 10),
           storage: { type: "r2", key, fileName, bytes: buf.byteLength },
-          downloadUrl: `/api/library?id=${encodeURIComponent(itemId)}&download=1`,
+          links: [{ url: downloadUrl, channel: "direct", label: "本站下载" }],
+          downloadUrl,
           demo: false,
         };
         const items = await readCatalog(kv);
         items.unshift(item);
         await writeCatalog(kv, items);
-        return json({ ok: true, item: withDownloadUrl(item) }, 200, request);
+        return json({ ok: true, item: withNormalized(item) }, 200, request);
       }
 
       return json({ error: "请提交 JSON（外链）或 multipart（R2 上传）" }, 400, request);
