@@ -3,7 +3,7 @@ name: Deploy cl-nav to GitHub Pages
 # 推送到 main（或手动触发）时，把静态站发布到 GitHub Pages。
 on:
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 permissions:

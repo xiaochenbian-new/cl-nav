@@ -38,14 +38,14 @@ python -m http.server 8080
 gitee 对 **GitHub Actions 数据中心 IP** 做了防滥用限流（`HTTP 429`），CI 里 clone gitee 几乎必失败，因此**同步改用本机定时任务**（本机 IP 不受限）：
 
 - 隐藏执行脚本：`scripts/sync-github-hidden.vbs`（`wscript` 调用，SW_HIDE 无窗口）
-- Windows 任务计划：每 15 分钟运行该 VBS → 后台静默 `git push github main`
+- Windows 任务计划：每 15 分钟运行该 VBS → 后台静默 `git push github master`
 
 > 更通用的做法与踩坑记录见：`C:\Users\16372\IdeaProjects\cursor-tools-nav\tool-nav\docs\gitee-github-auto-sync.md`
 
 ### 启用步骤（首次）
 
 1. 在 gitee 建库 `cl-nav`（公开或私有均可），在 github 建库 `cl-nav`
-2. 本机推送：`git push -u origin main` && `git push github main`
+2. 本机推送：`git push -u origin master` && `git push github master`
 3. github 仓库 **Settings → Pages → Source** 选 **GitHub Actions**（启用 Pages 发布）
 4. Cloudflare Pages：**Workers & Pages → Create application → Pages → Connect to Git**，选本仓库：
    - 框架预设：**无（None）**

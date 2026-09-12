@@ -3,4 +3,4 @@
 ' NOTE: keep this file ASCII-only (no Chinese comments) or wscript may throw runtime errors.
 Set sh = CreateObject("WScript.Shell")
 sh.CurrentDirectory = "C:\Users\16372\IdeaProjects\AI-BASE\cl-nav"
-sh.Run "git push github main", 0, True
+sh.Run "git push github master", 0, True
