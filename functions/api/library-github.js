@@ -132,6 +132,60 @@ async function ghFetch(path, token, init = {}) {
   return fetch("https://api.github.com" + path, { ...init, headers });
 }
 
+function toBase64(text) {
+  const bytes = new TextEncoder().encode(String(text || ""));
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+function formatGhError(body, fallback) {
+  let msg = (body && body.message) || fallback || "GitHub 请求失败";
+  if (body && Array.isArray(body.errors) && body.errors.length) {
+    const parts = body.errors.map((e) => {
+      if (e && e.message) return e.message;
+      return [e && e.resource, e && e.field, e && e.code].filter(Boolean).join(".");
+    });
+    msg += "（" + parts.join("；") + "）";
+  }
+  return msg;
+}
+
+/** 空仓库无法创建 Release：自动写一个 README 生成首个 commit */
+async function ensureRepoNotEmpty(owner, repo, token) {
+  const repoRes = await ghFetch(`/repos/${owner}/${repo}`, token);
+  const repoBody = await repoRes.json().catch(() => ({}));
+  if (!repoRes.ok) {
+    return { ok: false, error: formatGhError(repoBody, "无法读取仓库"), detail: repoBody, status: repoRes.status };
+  }
+  if (Number(repoBody.size) > 0) {
+    return { ok: true, repo: repoBody, initialized: false };
+  }
+
+  const putRes = await ghFetch(`/repos/${owner}/${repo}/contents/README.md`, token, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: "chore: initial commit for GitHub Releases",
+      content: toBase64(
+        "# cl-nav-file\n\nAuto-created by CL Nav so GitHub Releases can attach download files.\n"
+      ),
+    }),
+  });
+  const putBody = await putRes.json().catch(() => ({}));
+  if (!putRes.ok) {
+    return {
+      ok: false,
+      error:
+        formatGhError(putBody, "空仓库初始化失败") +
+        "。请打开仓库点 Add a README，提交一次后再上传",
+      detail: putBody,
+      status: putRes.status,
+    };
+  }
+  return { ok: true, repo: repoBody, initialized: true };
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -183,7 +237,7 @@ export async function onRequest(context) {
       const repoRes = await ghFetch(`/repos/${owner}/${repo}`, token);
       const repoBody = await repoRes.json().catch(() => ({}));
       if (!repoRes.ok) {
-        const msg = repoBody.message || "无法访问仓库 HTTP " + repoRes.status;
+        const msg = formatGhError(repoBody, "无法访问仓库 HTTP " + repoRes.status);
         let hint = "";
         if (repoRes.status === 404) {
           hint =
@@ -193,10 +247,14 @@ export async function onRequest(context) {
         }
         return json({ error: msg + hint, repo: `${owner}/${repo}` }, 502, request);
       }
+      const empty = !(Number(repoBody.size) > 0);
       return json(
         {
           ok: true,
-          message: "连接成功，可以上传",
+          message: empty
+            ? "连接成功（仓库还是空的，首次上传会自动初始化）"
+            : "连接成功，可以上传",
+          empty,
           repo: `${owner}/${repo}`,
           htmlUrl: repoBody.html_url || `https://github.com/${owner}/${repo}`,
           private: !!repoBody.private,
@@ -226,12 +284,24 @@ export async function onRequest(context) {
     const platform = String(form.get("platform") || "—").trim() || "—";
     const tag = newTag();
 
+    const ready = await ensureRepoNotEmpty(owner, repo, token);
+    if (!ready.ok) {
+      return json(
+        { error: ready.error, detail: ready.detail, repo: `${owner}/${repo}` },
+        ready.status === 401 ? 401 : 502,
+        request
+      );
+    }
+
+    const defaultBranch = (ready.repo && ready.repo.default_branch) || "main";
+
     // 1) 创建 Release
     const createRes = await ghFetch(`/repos/${owner}/${repo}/releases`, token, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         tag_name: tag,
+        target_commitish: defaultBranch,
         name: title,
         body: desc || `Uploaded via CL Nav · ${fileName}`,
         draft: false,
@@ -240,13 +310,20 @@ export async function onRequest(context) {
     });
     const createBody = await createRes.json().catch(() => ({}));
     if (!createRes.ok) {
-      const msg = createBody.message || "创建 Release 失败 HTTP " + createRes.status;
+      let msg = formatGhError(createBody, "创建 Release 失败 HTTP " + createRes.status);
       let hint = "";
       if (createRes.status === 404) {
         hint =
           "。请核对：1) Owner=xiaochenbian-new 2) Repo=cl-nav-file（不要多 s）3) Token 若是 fine-grained，必须勾选该仓库，并给 Contents 读写权限；建议改用 classic 且勾选 repo";
       } else if (createRes.status === 401 || createRes.status === 403) {
         hint = "。Token 无效或权限不足：请重新生成 classic token 并勾选 repo，保存后再上传";
+      } else if (createRes.status === 422 || /validation failed/i.test(msg)) {
+        hint =
+          "。常见原因：仓库没有任何提交。请打开 https://github.com/" +
+          owner +
+          "/" +
+          repo +
+          " 点 Add a README 提交一次，或确认 Token 有 Contents 写权限";
       }
       return json(
         { error: msg + hint, detail: createBody, repo: `${owner}/${repo}` },

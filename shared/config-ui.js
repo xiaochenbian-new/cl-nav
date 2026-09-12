@@ -609,7 +609,10 @@
         try {
           const j = await LibraryStorage.testGitHub(saved);
           setLibStatus(
-            "连接成功：" + (j.htmlUrl || j.repo) + " —— 可以点蓝色按钮上传文件了",
+            (j.message || "连接成功") +
+              "：" +
+              (j.htmlUrl || j.repo) +
+              (j.empty ? "" : " —— 可以点蓝色按钮上传文件了"),
             "ok"
           );
         } catch (err) {
