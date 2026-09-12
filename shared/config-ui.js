@@ -171,10 +171,147 @@
     });
   }
 
+  function channelOptionsHtml(selected) {
+    const channels = window.LibraryStorage?.channels || [
+      { id: "direct", name: "直链" },
+      { id: "github", name: "GitHub" },
+      { id: "lanzou", name: "蓝奏云" },
+      { id: "baidu", name: "百度网盘" },
+      { id: "quark", name: "夸克网盘" },
+      { id: "aliyun", name: "阿里云盘" },
+      { id: "other", name: "其他" },
+    ];
+    return channels
+      .map(
+        (c) =>
+          `<option value="${esc(c.id)}" ${c.id === (selected || "direct") ? "selected" : ""}>${esc(c.name)}</option>`
+      )
+      .join("");
+  }
+
+  function categoryOptionsHtml(selected) {
+    const cats = window.LibraryStorage?.normalizeCategories?.(window.LIBRARY_DATA?.categories) || [
+      { id: "other", name: "其他" },
+    ];
+    const cur = selected || "other";
+    return cats
+      .map(
+        (c) =>
+          `<option value="${esc(c.id)}" ${c.id === cur ? "selected" : ""}>${esc(c.name)}</option>`
+      )
+      .join("");
+  }
+
+  function linkRowHtml(link = {}) {
+    return `
+      <div class="cfg-lib-link-row" data-link-row>
+        <select data-link-channel aria-label="渠道">${channelOptionsHtml(link.channel || "direct")}</select>
+        <input type="text" data-link-url placeholder="https://…" value="${esc(link.url || "")}" spellcheck="false" />
+        <input type="text" data-link-label placeholder="备注" value="${esc(link.label || "")}" />
+        <button type="button" class="cfg-btn cfg-lib-x" data-link-remove title="移除">×</button>
+      </div>`;
+  }
+
+  function openLibResourceDialog() {
+    return new Promise((resolve) => {
+      document.getElementById("cfgLibResourceDialog")?.remove();
+      const overlay = document.createElement("div");
+      overlay.id = "cfgLibResourceDialog";
+      overlay.className = "cfg-dialog-overlay";
+      overlay.innerHTML = `
+        <div class="cfg-dialog cfg-dialog-wide" role="dialog" aria-modal="true" aria-labelledby="cfgLibDlgTitle">
+          <h3 id="cfgLibDlgTitle">添加外链资源</h3>
+          <div class="cfg-lib-form">
+            <label><span>名称</span><input type="text" id="cfgLibDlgName" placeholder="例如 JDK 安装包" autocomplete="off" /></label>
+            <label><span>分类</span><select id="cfgLibDlgCat">${categoryOptionsHtml("other")}</select></label>
+            <label class="cfg-lib-span2"><span>说明</span><textarea id="cfgLibDlgDesc" rows="2" placeholder="可选，展示在资源库页面"></textarea></label>
+          </div>
+          <div class="cfg-lib-links cfg-lib-dlg-links">
+            <div class="cfg-lib-links-head">
+              <strong>下载渠道</strong>
+              <button type="button" class="cfg-btn" id="cfgLibDlgAddLink">＋ 添加</button>
+            </div>
+            <div class="cfg-lib-link-list" id="cfgLibDlgLinkList">${linkRowHtml()}</div>
+          </div>
+          <p class="cfg-dialog-err" id="cfgLibDlgErr" hidden></p>
+          <div class="cfg-dialog-actions">
+            <button type="button" class="cfg-btn" id="cfgLibDlgCancel">取消</button>
+            <button type="button" class="cfg-btn primary" id="cfgLibDlgOk">添加</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+
+      const list = overlay.querySelector("#cfgLibDlgLinkList");
+      const errEl = overlay.querySelector("#cfgLibDlgErr");
+      const nameInput = overlay.querySelector("#cfgLibDlgName");
+
+      const close = (result) => {
+        overlay.remove();
+        document.removeEventListener("keydown", onKey);
+        resolve(result);
+      };
+
+      const readLinks = () =>
+        [...list.querySelectorAll("[data-link-row]")].map((row) => ({
+          channel: row.querySelector("[data-link-channel]")?.value || "other",
+          url: String(row.querySelector("[data-link-url]")?.value || "").trim(),
+          label: String(row.querySelector("[data-link-label]")?.value || "").trim(),
+        }));
+
+      const submit = () => {
+        const title = String(nameInput.value || "").trim();
+        const category = overlay.querySelector("#cfgLibDlgCat")?.value || "other";
+        const desc = String(overlay.querySelector("#cfgLibDlgDesc")?.value || "").trim();
+        const links = readLinks().filter((l) => /^https?:\/\//i.test(l.url));
+        if (!links.length) {
+          errEl.hidden = false;
+          errEl.textContent = "请至少填写一个以 http(s):// 开头的下载地址";
+          return;
+        }
+        close({
+          title: title || "未命名资源",
+          category,
+          desc,
+          links,
+          downloadUrl: links[0].url,
+          channel: links[0].channel,
+        });
+      };
+
+      const onKey = (e) => {
+        if (e.key === "Escape") close(null);
+      };
+      document.addEventListener("keydown", onKey);
+
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) close(null);
+      });
+      overlay.querySelector("#cfgLibDlgCancel").addEventListener("click", () => close(null));
+      overlay.querySelector("#cfgLibDlgOk").addEventListener("click", submit);
+      overlay.querySelector("#cfgLibDlgAddLink").addEventListener("click", () => {
+        list.insertAdjacentHTML("beforeend", linkRowHtml());
+      });
+      list.addEventListener("click", (e) => {
+        if (!e.target.closest("[data-link-remove]")) return;
+        const row = e.target.closest("[data-link-row]");
+        if (!row) return;
+        if (list.querySelectorAll("[data-link-row]").length <= 1) {
+          row.querySelector("[data-link-url]").value = "";
+          row.querySelector("[data-link-label]").value = "";
+        } else {
+          row.remove();
+        }
+      });
+
+      nameInput.focus();
+    });
+  }
+
   window.NavConfigUI = {
     selectedCatId: "",
     activeTab: "quick",
     libEditingId: "",
+    libFilterCategory: "all",
 
     open(opts) {
       if (opts && opts.tab) this.activeTab = opts.tab;
@@ -195,6 +332,7 @@
       const panel = document.getElementById("settingsPanel");
       if (panel) panel.hidden = true;
       document.getElementById("cfgLinkDialog")?.remove();
+      document.getElementById("cfgLibResourceDialog")?.remove();
     },
 
     logout() {
@@ -354,9 +492,10 @@
           <div class="cfg-toolbar cfg-lib-toolbar">
             <div>
               <strong>资源库</strong>
-              <p class="settings-tip" style="margin:0.2rem 0 0">上传文件或登记外链，再编辑说明与下载渠道</p>
+              <p class="settings-tip" style="margin:0.2rem 0 0">上传到 GitHub Releases，或添加多渠道外链</p>
             </div>
             <div class="cfg-item-actions">
+              <button type="button" class="cfg-btn" id="libAddLinkBtn">外链</button>
               <button type="button" class="cfg-btn primary" id="ghUploadBtn">上传到 Release</button>
               <input id="ghFileInput" type="file" hidden />
             </div>
@@ -388,47 +527,20 @@
                   <span class="settings-tip">xiaochenbian-new / cl-nav-file · &lt;95MB</span>
                 </div>
               </section>
-              <section class="cfg-lib-section">
-                <header class="cfg-lib-section-h">
-                  <strong>资源分类</strong>
-                  <span>默认可改；随 WebDAV / 云端备份同步</span>
-                </header>
-                <div class="cfg-lib-cats" id="libCatChips"></div>
-                <div class="cfg-lib-actions">
-                  <input type="text" id="libCatNewName" placeholder="新分类名称" autocomplete="off" style="flex:1;min-width:8rem" />
-                  <button type="button" class="cfg-btn" id="libCatAdd">添加分类</button>
-                </div>
-              </section>
-              <section class="cfg-lib-section">
-                <header class="cfg-lib-section-h">
-                  <strong>快速登记外链</strong>
-                  <span>不上传文件，只登记下载地址</span>
-                </header>
-                <div class="cfg-lib-form">
-                  <label><span>名称</span><input type="text" id="libLinkTitle" placeholder="例如 JDK 安装包" autocomplete="off" /></label>
-                  <label><span>分类</span>
-                    <select id="libLinkCat"></select>
-                  </label>
-                  <label class="cfg-lib-span2"><span>说明</span><input type="text" id="libLinkDesc" placeholder="可选" autocomplete="off" /></label>
-                  <label><span>渠道</span>
-                    <select id="libLinkChannel">
-                      <option value="direct">直链</option>
-                      <option value="github">GitHub</option>
-                      <option value="lanzou">蓝奏云</option>
-                      <option value="baidu">百度网盘</option>
-                      <option value="quark">夸克网盘</option>
-                      <option value="aliyun">阿里云盘</option>
-                      <option value="other">其他</option>
-                    </select>
-                  </label>
-                  <label><span>地址</span><input type="text" id="libLinkUrl" placeholder="https://…" autocomplete="off" spellcheck="false" /></label>
-                </div>
-                <div class="cfg-lib-actions">
-                  <button type="button" class="cfg-btn" id="libAdminAddLink">添加外链资源</button>
-                </div>
-              </section>
             </div>
           </details>
+
+          <section class="cfg-lib-cats-panel">
+            <div class="cfg-lib-cats-head">
+              <strong>资源分类</strong>
+              <span class="settings-tip">点击名称可重命名 · 随 WebDAV / 云端同步</span>
+            </div>
+            <div class="cfg-lib-cats" id="libCatChips"></div>
+            <div class="cfg-lib-cats-add">
+              <input type="text" id="libCatNewName" placeholder="新分类名称" autocomplete="off" />
+              <button type="button" class="cfg-btn" id="libCatAdd">添加</button>
+            </div>
+          </section>
 
           <div class="cfg-lib-list-head">
             <strong>已上传资源</strong>
@@ -438,6 +550,7 @@
               <span class="settings-tip" id="libBatchHint">已选 0 项</span>
             </div>
           </div>
+          <div class="cfg-lib-filter" id="libAdminFilter" role="tablist" aria-label="按分类筛选"></div>
           <div class="cfg-lib-list" id="libAdminList"></div>
         </div>
         <div class="cfg-pane" data-pane="data" ${tab !== "data" ? "hidden" : ""}>
@@ -541,11 +654,13 @@
     async renderLibraryAdmin(root) {
       const listEl = root?.querySelector("#libAdminList");
       const batchBar = root?.querySelector("#libBatchBar");
+      const filterEl = root?.querySelector("#libAdminFilter");
       if (!listEl) return;
 
       if (!window.LibraryStorage) {
         listEl.innerHTML = `<p class="settings-tip">未加载资源库模块。</p>`;
         if (batchBar) batchBar.hidden = true;
+        if (filterEl) filterEl.innerHTML = "";
         return;
       }
 
@@ -555,13 +670,41 @@
       } catch (e) {
         listEl.innerHTML = `<p class="settings-tip">读取失败：${esc(e.message || e)}</p>`;
         if (batchBar) batchBar.hidden = true;
+        if (filterEl) filterEl.innerHTML = "";
         return;
       }
 
       this.renderLibCategoryUi(root);
 
+      const editableCats = LibraryStorage.normalizeCategories?.(LIBRARY_DATA.categories) || [];
+      const catIds = new Set(editableCats.map((c) => c.id));
+      if (this.libFilterCategory !== "all" && !catIds.has(this.libFilterCategory)) {
+        this.libFilterCategory = "all";
+      }
+
+      if (filterEl) {
+        const tabs = [{ id: "all", name: "全部" }, ...editableCats];
+        filterEl.innerHTML = tabs
+          .map((c) => {
+            const count =
+              c.id === "all" ? items.length : items.filter((i) => i.category === c.id).length;
+            const active = c.id === this.libFilterCategory ? " is-active" : "";
+            return `<button type="button" class="cfg-lib-filter-btn${active}" data-lib-filter="${esc(
+              c.id
+            )}" role="tab" aria-selected="${c.id === this.libFilterCategory ? "true" : "false"}">
+              <span>${esc(c.name)}</span><em>${count}</em>
+            </button>`;
+          })
+          .join("");
+      }
+
+      const filtered =
+        this.libFilterCategory === "all"
+          ? items
+          : items.filter((it) => it.category === this.libFilterCategory);
+
       const catName = (id) => {
-        const c = (LibraryStorage.uiCategories?.() || []).find((x) => x.id === id);
+        const c = editableCats.find((x) => x.id === id) || (LibraryStorage.uiCategories?.() || []).find((x) => x.id === id);
         return c ? c.name : id || "未分类";
       };
       const channels = LibraryStorage.channels || [];
@@ -573,16 +716,20 @@
           )
           .join("");
 
-      if (batchBar) batchBar.hidden = !items.length;
+      if (batchBar) batchBar.hidden = !filtered.length;
 
       if (!items.length) {
         listEl.innerHTML = `<p class="settings-tip cfg-lib-empty">还没有资源。可先展开「配置管理」测试连接，再点「上传到 Release」。</p>`;
         return;
       }
 
-      const editableCats = LibraryStorage.normalizeCategories?.(LIBRARY_DATA.categories) || [];
+      if (!filtered.length) {
+        listEl.innerHTML = `<p class="settings-tip cfg-lib-empty">该分类下暂无资源。</p>`;
+        this.syncLibBatchUi(root);
+        return;
+      }
 
-      listEl.innerHTML = items
+      listEl.innerHTML = filtered
         .map((it) => {
           const open = this.libEditingId === it.id;
           const links = LibraryStorage.itemLinks(it);
@@ -665,18 +812,6 @@
     renderLibCategoryUi(root) {
       if (!root || !window.LibraryStorage) return;
       const cats = LibraryStorage.normalizeCategories?.(LIBRARY_DATA.categories) || [];
-      const sel = root.querySelector("#libLinkCat");
-      if (sel) {
-        const cur = sel.value || "other";
-        sel.innerHTML = cats
-          .map(
-            (c) =>
-              `<option value="${esc(c.id)}" ${c.id === cur || (!cats.some((x) => x.id === cur) && c.id === "other") ? "selected" : ""}>${esc(
-                c.name
-              )}</option>`
-          )
-          .join("");
-      }
       const chips = root.querySelector("#libCatChips");
       if (!chips) return;
       chips.innerHTML = cats
@@ -684,9 +819,11 @@
           (c) => `
           <span class="cfg-lib-cat-chip" data-cat-id="${esc(c.id)}">
             <button type="button" data-cat-rename="${esc(c.id)}" title="重命名">${esc(c.name)}</button>
-            <button type="button" class="cfg-lib-x" data-cat-del="${esc(c.id)}" title="删除" ${
-              c.id === "other" ? "disabled" : ""
-            }>×</button>
+            ${
+              c.id === "other"
+                ? ""
+                : `<button type="button" class="cfg-lib-x" data-cat-del="${esc(c.id)}" title="删除">×</button>`
+            }
           </span>`
         )
         .join("");
@@ -774,11 +911,10 @@
         this.activeTab = "library";
         setLibStatus("正在上传到 GitHub Releases（较大文件可能需 1～2 分钟）…");
         try {
-          const category = root.querySelector("#libLinkCat")?.value || "other";
           const item = await LibraryStorage.uploadToGitHub(file, {
-            title: root.querySelector("#libLinkTitle")?.value || file.name,
-            desc: root.querySelector("#libLinkDesc")?.value || "",
-            category,
+            title: file.name,
+            desc: "",
+            category: "other",
           });
           setLibStatus("上传成功：" + (item?.title || file.name) + " —— 可点「编辑」补充说明与多渠道外链", "ok");
           this.libEditingId = item?.id || "";
@@ -788,26 +924,30 @@
         }
       });
 
-      root.querySelector("#libAdminAddLink")?.addEventListener("click", async () => {
+      root.querySelector("#libAddLinkBtn")?.addEventListener("click", async () => {
         if (!window.LibraryStorage?.addLink) return;
         this.activeTab = "library";
-        const title = root.querySelector("#libLinkTitle")?.value || "";
-        const downloadUrl = root.querySelector("#libLinkUrl")?.value || "";
-        const category = root.querySelector("#libLinkCat")?.value || "other";
-        const desc = root.querySelector("#libLinkDesc")?.value || "";
-        const channel = root.querySelector("#libLinkChannel")?.value || "direct";
+        const data = await openLibResourceDialog();
+        if (!data) return;
         setLibStatus("正在添加…");
         try {
-          await LibraryStorage.addLink({ title, downloadUrl, category, desc, channel });
-          setLibStatus("已添加", "ok");
-          const urlInput = root.querySelector("#libLinkUrl");
-          const titleInput = root.querySelector("#libLinkTitle");
-          if (urlInput) urlInput.value = "";
-          if (titleInput) titleInput.value = "";
+          await LibraryStorage.addLink(data);
+          setLibStatus("已添加外链资源", "ok");
           await this.renderLibraryAdmin(root);
+          if (window.LibraryUI?.refreshListQuiet) LibraryUI.refreshListQuiet();
         } catch (err) {
           setLibStatus(err.message || "添加失败", "err");
         }
+      });
+
+      root.querySelector("#libAdminFilter")?.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-lib-filter]");
+        if (!btn) return;
+        const id = btn.dataset.libFilter || "all";
+        if (id === this.libFilterCategory) return;
+        this.libFilterCategory = id;
+        this.activeTab = "library";
+        this.renderLibraryAdmin(root);
       });
 
       root.querySelector("#libCatAdd")?.addEventListener("click", async () => {

@@ -661,6 +661,57 @@
   font-size: 13px;
 }
 
+.cfg-lib-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0 0.55rem;
+}
+
+.cfg-lib-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0.28rem 0.55rem 0.28rem 0.7rem;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.cfg-lib-filter-btn em {
+  font-style: normal;
+  font-weight: 650;
+  font-size: 11px;
+  min-width: 1.15rem;
+  text-align: center;
+  padding: 0.08rem 0.35rem;
+  border-radius: 999px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--bg) 70%, var(--panel));
+}
+
+.cfg-lib-filter-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+  color: var(--accent);
+}
+
+.cfg-lib-filter-btn.is-active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.cfg-lib-filter-btn.is-active em {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+}
+
 .cfg-lib-batch {
   margin: 0;
   padding: 0;
@@ -847,21 +898,61 @@
 }
 
 
+.cfg-dialog-wide {
+  width: min(640px, 100%);
+}
+
+.cfg-dialog .cfg-lib-form {
+  margin: 0;
+}
+
+.cfg-dialog .cfg-lib-form input,
+.cfg-dialog .cfg-lib-form select,
+.cfg-dialog .cfg-lib-form textarea {
+  background: var(--bg);
+}
+
+.cfg-lib-dlg-links {
+  margin-top: 0.15rem;
+}
+
+.cfg-lib-cats-panel {
+  margin: 0 0 0.85rem;
+  padding: 0.7rem 0.8rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 55%, var(--panel));
+}
+
+.cfg-lib-cats-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.cfg-lib-cats-head strong {
+  font-size: 13px;
+}
+
 .cfg-lib-cats {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
-  margin-bottom: 0.45rem;
+  margin-bottom: 0.55rem;
+  min-height: 1.8rem;
 }
 
 .cfg-lib-cat-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.15rem;
-  border: 1px solid var(--line);
+  gap: 0;
+  border: 1px solid color-mix(in srgb, var(--line) 90%, transparent);
   border-radius: 999px;
-  background: var(--bg);
-  padding: 0.1rem 0.15rem 0.1rem 0.15rem;
+  background: var(--panel);
+  padding: 0.05rem;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 4%, transparent);
 }
 
 .cfg-lib-cat-chip > button[data-cat-rename] {
@@ -870,8 +961,8 @@
   color: var(--ink);
   font: inherit;
   font-size: 12px;
-  font-weight: 600;
-  padding: 0.25rem 0.45rem;
+  font-weight: 650;
+  padding: 0.32rem 0.65rem;
   cursor: pointer;
   border-radius: 999px;
 }
@@ -884,12 +975,45 @@
 .cfg-lib-cat-chip > .cfg-lib-x {
   border: 0;
   background: transparent;
-  min-width: 1.4rem;
-  padding: 0.15rem;
+  min-width: 1.55rem;
+  height: 1.55rem;
+  padding: 0;
+  margin-right: 0.15rem;
   border-radius: 999px;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.cfg-lib-cat-chip > .cfg-lib-x:hover {
+  color: #dc2626;
+  background: color-mix(in srgb, #dc2626 10%, transparent);
 }
 
 .cfg-lib-cat-chip > .cfg-lib-x:disabled {
   opacity: 0.25;
   cursor: not-allowed;
+}
+
+.cfg-lib-cats-add {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.cfg-lib-cats-add input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.42rem 0.6rem;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--panel);
+}
+
+.cfg-lib-cats-add input:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
 }
