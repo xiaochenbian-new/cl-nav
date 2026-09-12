@@ -352,8 +352,8 @@
             </div>
             <div class="cfg-webdav-row">
               <label class="chk"><input type="checkbox" id="wdAuto" ${wd.autoBackup ? "checked" : ""} /> 自动同步</label>
-              <label class="chk" title="经本站 /api/webdav 转发，解决坚果云 CORS"><input type="checkbox" id="wdProxy" ${
-                wd.useProxy !== false ? "checked" : ""
+              <label class="chk" title="经本站 /api/webdav 转发以绕过 CORS；坚果云在 Cloudflare 上通常仍不可达"><input type="checkbox" id="wdProxy" ${
+                wd.useProxy ? "checked" : ""
               } /> 同源代理（Cloudflare）</label>
               <button type="button" class="cfg-btn" id="wdSave">保存配置</button>
               <button type="button" class="cfg-btn" id="wdTest">测试连接</button>
@@ -366,7 +366,7 @@
                 ? "网盘有更新备份，建议「从网盘恢复」或「立即同步」。"
                 : "同步上传/下载的是当前本地 JSON；删除的分类与网站会随 JSON 一起生效。"
             }</p>
-            <p class="settings-tip">坚果云 WebDAV 无浏览器 CORS，部署在 Cloudflare Pages 时请勾选「同源代理」（走 /api/webdav）。仅静态托管（如 GitHub Pages）无法代理，请用下方 JSON 备份。</p>
+            <p class="settings-tip">浏览器无法直连坚果云（无 CORS）。Cloudflare 同源代理能转发请求，但其海外节点通常访问不了坚果云（易出现 HTTP 520），此时请用下方「本地 JSON」导入/导出。若使用国外 WebDAV，可勾选「同源代理」。</p>
           </div>
           <div class="cfg-section-divider"></div>
           <div class="cfg-toolbar">

@@ -35,15 +35,14 @@
   function loadPrefs() {
     try {
       const raw = JSON.parse(localStorage.getItem(PREFS_KEY) || "{}");
-      const defaultProxy = typeof location !== "undefined" && /^https?:$/i.test(location.protocol);
       return {
         baseUrl: raw.baseUrl || "",
         username: raw.username || "",
         password: raw.password || "",
         remotePath: normalizeRemotePath(raw.remotePath || DEFAULT_PATH),
         autoBackup: !!raw.autoBackup,
-        /** Cloudflare Pages 等同源代理，绕过坚果云 CORS */
-        useProxy: raw.useProxy != null ? !!raw.useProxy : defaultProxy,
+        /** 海外边缘常连不上坚果云；默认关闭，国外 WebDAV 再手动开启 */
+        useProxy: raw.useProxy != null ? !!raw.useProxy : false,
         proxyPath: raw.proxyPath || "/api/webdav",
         lastUploadExportedAt: Number(raw.lastUploadExportedAt) || 0,
         remoteNewerSkipAt: Number(raw.remoteNewerSkipAt) || 0,
@@ -56,7 +55,7 @@
         password: "",
         remotePath: DEFAULT_PATH,
         autoBackup: false,
-        useProxy: typeof location !== "undefined" && /^https?:$/i.test(location.protocol),
+        useProxy: false,
         proxyPath: "/api/webdav",
         lastUploadExportedAt: 0,
         remoteNewerSkipAt: 0,
@@ -329,6 +328,13 @@
         if (resp.status === 405) return "连接成功：服务器可达，账号可用";
         if (resp.status === 401) saw401 = true;
         if (resp.status === 403) saw403 = true;
+        if ([520, 521, 522, 523, 502].includes(resp.status)) {
+          return (
+            "测试失败：Cloudflare 边缘无法访问坚果云（HTTP " +
+            resp.status +
+            "）。同源代理解决不了跨境连通问题，请用下方「本地 JSON」备份/恢复，或改用可达的国外 WebDAV。"
+          );
+        }
         if ([301, 302, 307, 308].includes(resp.status)) {
           return "连接成功：服务器有重定向，请确认地址是否完整";
         }

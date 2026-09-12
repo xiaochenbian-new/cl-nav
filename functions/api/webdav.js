@@ -77,6 +77,23 @@ export async function onRequest(context) {
     }
 
     const upstream = await fetch(target.toString(), init);
+
+    // Cloudflare / Vercel 等海外边缘常无法直连坚果云（国内 IP），会表现为 520
+    if (upstream.status === 520 || upstream.status === 521 || upstream.status === 522 || upstream.status === 523) {
+      return json(
+        {
+          error:
+            "无法从 Cloudflare 边缘访问该 WebDAV（HTTP " +
+            upstream.status +
+            "）。坚果云等国内服务通常拦截或不可达海外节点，请改用「本地 JSON」备份，或自建国内代理。",
+          status: upstream.status,
+          host: target.hostname,
+        },
+        502,
+        request
+      );
+    }
+
     const outHeaders = new Headers(corsHeaders(request));
     const ct = upstream.headers.get("content-type");
     if (ct) outHeaders.set("Content-Type", ct);
@@ -88,7 +105,12 @@ export async function onRequest(context) {
     });
   } catch (err) {
     return json(
-      { error: "代理请求失败：" + (err && err.message ? err.message : String(err)) },
+      {
+        error:
+          "代理请求失败：" +
+          (err && err.message ? err.message : String(err)) +
+          "。若目标是坚果云，Cloudflare Pages 海外节点通常无法连通，请用本地 JSON 或国内代理。",
+      },
       502,
       request
     );
