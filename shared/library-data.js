@@ -425,6 +425,59 @@
       return j.item;
     },
 
+    /** 批量登记外链资源（多网盘一键导入） */
+    async addLinks(list = []) {
+      if (!window.NavAuth?.isLoggedIn?.()) throw new Error("请先登录后再添加");
+      const items = (Array.isArray(list) ? list : [])
+        .map((meta) => {
+          let links = Array.isArray(meta.links) ? meta.links.slice() : [];
+          if (!links.length && meta.downloadUrl) {
+            links = [
+              {
+                url: meta.downloadUrl,
+                channel: meta.channel || "direct",
+                label: meta.linkLabel || "",
+              },
+            ];
+          }
+          links = links
+            .map((l) => ({
+              url: String(l.url || "").trim(),
+              channel: String(l.channel || "other").trim() || "other",
+              label: String(l.label || "").trim(),
+            }))
+            .filter((l) => /^https?:\/\//i.test(l.url));
+          if (!links.length) return null;
+          return {
+            title: meta.title || "未命名资源",
+            desc: meta.desc || "",
+            category: meta.category || "other",
+            version: meta.version || "—",
+            size: meta.size || "—",
+            platform: meta.platform || "—",
+            links,
+            downloadUrl: links[0].url,
+          };
+        })
+        .filter(Boolean);
+      if (!items.length) throw new Error("没有可添加的有效链接");
+
+      const res = await api("POST", {
+        body: JSON.stringify({ action: "createMany", items }),
+        headers: authHeaders(true),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.status === 401) throw new Error(j.error || "未授权，请重新登录");
+      if (!res.ok) throw new Error(j.error || "批量添加失败 HTTP " + res.status);
+      const created = Array.isArray(j.items) ? j.items : [];
+      if (created.length) {
+        LIBRARY_DATA.items = LIBRARY_DATA.items || [];
+        LIBRARY_DATA.items = created.concat(LIBRARY_DATA.items);
+      }
+      markSyncDirty();
+      return created;
+    },
+
     /** 更新说明 / 外链等 */
     async update(id, patch = {}) {
       if (!id) throw new Error("缺少 id");

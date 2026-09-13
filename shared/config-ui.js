@@ -669,6 +669,7 @@
             </div>
             <div class="cfg-item-actions">
               <button type="button" class="cfg-btn" id="libAddLinkBtn">外链</button>
+              <button type="button" class="cfg-btn" id="libBatchImportBtn" title="粘贴多网盘分享链接批量导入">批量导入</button>
               <button type="button" class="cfg-btn primary" id="ghUploadBtn">上传到 Release</button>
               <input id="ghFileInput" type="file" multiple hidden />
             </div>
@@ -1192,6 +1193,72 @@
           if (window.LibraryUI?.refreshListQuiet) LibraryUI.refreshListQuiet();
         } catch (err) {
           setLibStatus(err.message || "添加失败", "err");
+        }
+      });
+
+      root.querySelector("#libBatchImportBtn")?.addEventListener("click", async () => {
+        if (!window.LibraryStorage?.addLinks && !window.LibraryStorage?.addLink) return;
+        this.activeTab = "library";
+        const raw = window.prompt(
+          "粘贴分享文本（可多段，用空行分隔）。每段第一行作标题，其余识别 http(s) 链接与提取码：",
+          ""
+        );
+        if (raw == null) return;
+        const blocks = String(raw)
+          .split(/\n\s*\n/)
+          .map((b) => b.trim())
+          .filter(Boolean);
+        const items = [];
+        for (const block of blocks) {
+          const lines = block.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+          if (!lines.length) continue;
+          const urls = [];
+          let pwd = "";
+          let title = "";
+          for (const line of lines) {
+            const mPwd = /提取码[:：\s]*([a-zA-Z0-9]{3,8})/.exec(line);
+            if (mPwd) pwd = mPwd[1];
+            const mUrl = /(https?:\/\/[^\s]+)/i.exec(line);
+            if (mUrl) {
+              urls.push(mUrl[1].replace(/[)\]>,，。]+$/, ""));
+              continue;
+            }
+            if (!title && !/^https?:\/\//i.test(line) && !/提取码/.test(line)) title = line;
+          }
+          if (!urls.length) continue;
+          items.push({
+            title: title || urls[0],
+            category: "other",
+            links: urls.map((url) => {
+              let channel = "other";
+              if (/baidu\.com/i.test(url)) channel = "baidu";
+              else if (/alipan\.com|aliyundrive\.com/i.test(url)) channel = "aliyun";
+              else if (/123pan\.com|123684\.com/i.test(url)) channel = "123";
+              else if (/lanzou/i.test(url)) channel = "lanzou";
+              return {
+                url,
+                channel,
+                label: pwd && /baidu/i.test(url) ? `提取码 ${pwd}` : "",
+              };
+            }),
+          });
+        }
+        if (!items.length) {
+          setLibStatus("未识别到有效链接", "err");
+          return;
+        }
+        setLibStatus(`正在导入 ${items.length} 条…`);
+        try {
+          if (window.LibraryStorage.addLinks) {
+            await LibraryStorage.addLinks(items);
+          } else {
+            for (const it of items) await LibraryStorage.addLink(it);
+          }
+          setLibStatus(`已导入 ${items.length} 条资源`, "ok");
+          await this.renderLibraryAdmin(root);
+          if (window.LibraryUI?.refreshListQuiet) LibraryUI.refreshListQuiet();
+        } catch (err) {
+          setLibStatus(err.message || "批量导入失败", "err");
         }
       });
 

@@ -12,7 +12,7 @@
  */
 const CATALOG_KEY = "library:catalog";
 const DEFAULT_ADMIN = "xiaochenbian";
-const LINK_CHANNELS = new Set(["github", "lanzou", "baidu", "quark", "aliyun", "direct", "other"]);
+const LINK_CHANNELS = new Set(["github", "lanzou", "baidu", "quark", "aliyun", "123", "direct", "other"]);
 const DEFAULT_LIB_CATEGORIES = [
   { id: "software", name: "软件" },
   { id: "installer", name: "安装包" },
@@ -356,6 +356,40 @@ export async function onRequest(context) {
           }
           await writeCatalog(kv, keep);
           return json({ ok: true, deleted: ids.length }, 200, request);
+        }
+
+        if (action === "createmany") {
+          const rawItems = Array.isArray(body.items) ? body.items : [];
+          if (!rawItems.length) return json({ error: "items 不能为空" }, 400, request);
+          const items = await readCatalog(kv);
+          const created = [];
+          for (const raw of rawItems.slice(0, 50)) {
+            if (!raw || typeof raw !== "object") continue;
+            const links = normalizeLinks(raw.links, raw.downloadUrl, String(raw.channel || "direct"));
+            if (!links.length) continue;
+            const newItemId = newId();
+            const title = String(raw.title || "").trim() || "未命名资源";
+            const item = {
+              id: newItemId,
+              title,
+              desc: String(raw.desc || "").trim(),
+              category: String(raw.category || "other").trim() || "other",
+              version: String(raw.version || "—").trim() || "—",
+              size: String(raw.size || "—").trim() || "—",
+              platform: String(raw.platform || "—").trim() || "—",
+              updatedAt: new Date().toISOString().slice(0, 10),
+              storage: { type: "url" },
+              links,
+              downloadUrl: links[0].url,
+            };
+            items.unshift(item);
+            created.push(withNormalized(item));
+          }
+          if (!created.length) {
+            return json({ error: "没有可添加的有效资源（需 http/https 链接）" }, 400, request);
+          }
+          await writeCatalog(kv, items);
+          return json({ ok: true, items: created, count: created.length }, 200, request);
         }
 
         if (action === "categoriessave") {
