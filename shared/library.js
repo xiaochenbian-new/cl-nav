@@ -219,20 +219,20 @@
                     const code =
                       window.LibraryStorage?.extractCode?.(l.label) || "";
                     const tip = code
-                      ? `${name} · 提取码 ${code}（点击复制并打开）`
+                      ? `${name} · 提取码 ${code}（点击打开并自动带入）`
                       : l.url || name;
-                    // 多渠道同级：不标 primary；仅单直链/GitHub 保留主按钮样式
-                    const primary =
-                      links.length === 1 &&
-                      (l.channel === "github" || l.channel === "direct")
-                        ? " primary"
-                        : "";
-                    return `<button type="button" class="lib-btn${primary}" data-dl="${esc(it.id)}" data-dl-idx="${idx}" data-pwd="${esc(
+                    const icon =
+                      window.LibraryStorage?.channelIcon?.(l.channel) || "";
+                    return `<button type="button" class="lib-btn" data-dl="${esc(it.id)}" data-dl-idx="${idx}" data-pwd="${esc(
                       code
-                    )}" title="${esc(tip)}">${esc(name)}</button>`;
+                    )}" title="${esc(tip)}"><span class="lib-btn-ico">${icon}</span><span>${esc(
+                      name
+                    )}</span></button>`;
                   })
                   .join("")
-              : `<button type="button" class="lib-btn primary" data-dl="${esc(it.id)}" data-dl-idx="0">下载</button>`
+              : `<button type="button" class="lib-btn" data-dl="${esc(it.id)}" data-dl-idx="0"><span class="lib-btn-ico">${
+                  window.LibraryStorage?.channelIcon?.("direct") || ""
+                }</span><span>下载</span></button>`
             : `<button type="button" class="lib-btn" disabled>即将支持</button>`;
           return `
           <article class="lib-card" data-id="${esc(it.id)}">
@@ -302,7 +302,9 @@
               this.setStatus(`提取码：${pwd}（复制失败，请手动输入）`, "ok");
             }
           }
-          const url = await LibraryStorage.getDownloadUrl(item, link);
+          let url = await LibraryStorage.getDownloadUrl(item, link);
+          url =
+            LibraryStorage.withExtractCode?.(url, link?.channel, pwd) || url;
           window.open(url, "_blank", "noopener");
         } catch (err) {
           this.setStatus(err.message || "下载失败", "err");

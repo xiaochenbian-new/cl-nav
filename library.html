@@ -330,6 +330,9 @@
     }
 
     .lib-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
       border: 1px solid var(--line);
       background: var(--panel);
       color: var(--ink);
@@ -341,13 +344,18 @@
       cursor: pointer;
     }
 
-    .lib-btn:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); color: var(--accent); }
-    .lib-btn.primary {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #fff;
+    .lib-btn-ico {
+      display: inline-flex;
+      width: 14px;
+      height: 14px;
+      flex: 0 0 auto;
+      color: var(--muted);
     }
-    .lib-btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
+
+    .lib-btn-ico svg { display: block; }
+
+    .lib-btn:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); color: var(--accent); }
+    .lib-btn:hover .lib-btn-ico { color: var(--accent); }
     .lib-btn:disabled {
       opacity: 0.45;
       cursor: not-allowed;
@@ -582,9 +590,9 @@
   <script src="shared/cf-sync.js?v=20260328s"></script>
   <script src="shared/webdav.js?v=20260328s"></script>
   <script src="shared/portal.js"></script>
-  <script src="shared/library-data.js?v=20260913a"></script>
-  <script src="shared/config-ui.js?v=20260913a"></script>
-  <script src="shared/library.js?v=20260913a"></script>
+  <script src="shared/library-data.js?v=20260913b"></script>
+  <script src="shared/config-ui.js?v=20260913b"></script>
+  <script src="shared/library.js?v=20260913b"></script>
   <script>
     LibraryUI.init();
   </script>

@@ -226,18 +226,71 @@
     return "";
   }
 
+  /** 渠道小图标（内联 SVG，不依赖外链） */
+  function channelIcon(channel) {
+    const common =
+      'width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"';
+    switch (String(channel || "")) {
+      case "github":
+        return `<svg ${common}><path fill="currentColor" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0 1 12 6.8c.85 0 1.71.11 2.51.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/></svg>`;
+      case "baidu":
+        return `<svg ${common}><path fill="#2D7EFF" d="M7.2 15.2a3.2 3.2 0 1 1 0-6.4 3.2 3.2 0 0 1 0 6.4Zm4.8 1.6a2.8 2.8 0 1 1 0-5.6 2.8 2.8 0 0 1 0 5.6Zm4.9-.4a2.4 2.4 0 1 1 0-4.8 2.4 2.4 0 0 1 0 4.8ZM9.6 9.2a2.6 2.6 0 1 1 2.2-4.2 4.4 4.4 0 0 1 4.4 1.2 2.4 2.4 0 1 1 .2 4.2H9.6Z"/></svg>`;
+      case "aliyun":
+        return `<svg ${common}><path fill="#FF6A00" d="M6 16.5A4.5 4.5 0 0 1 6 7.5a5.5 5.5 0 0 1 10.6-1.4A4 4 0 0 1 18 16.5H6Z"/><path fill="#fff" d="M9 13.2h6v1.3H9zM10.2 10.8h3.6v1.3h-3.6z"/></svg>`;
+      case "123":
+        return `<svg ${common}><rect x="3" y="6" width="18" height="13" rx="3" fill="#1A7FEC"/><path stroke="#fff" stroke-width="1.8" d="M8 12.5h8M12 8.5v8"/></svg>`;
+      case "lanzou":
+        return `<svg ${common}><path fill="#5B8CFF" d="M12 3 4 7v5c0 5 3.4 8.4 8 9 4.6-.6 8-4 8-9V7l-8-4Z"/><path stroke="#fff" stroke-width="1.6" d="M9 12h6"/></svg>`;
+      case "quark":
+        return `<svg ${common}><circle cx="12" cy="12" r="9" fill="#0DBF8A"/><path stroke="#fff" stroke-width="1.8" d="M8 12h8M12 8v8"/></svg>`;
+      case "direct":
+        return `<svg ${common}><path stroke="currentColor" stroke-width="1.8" d="M10 14 7 11m0 0 3-3m-3 3h8a3 3 0 0 1 0 6h-2"/><path stroke="currentColor" stroke-width="1.8" d="m14 10 3 3m0 0-3 3m3-3H9a3 3 0 0 1 0-6h2"/></svg>`;
+      default:
+        return `<svg ${common}><path fill="currentColor" d="M6 18h12v2H6v-2Zm6-14 5 5h-3v5h-4v-5H7l5-5Z"/></svg>`;
+    }
+  }
+
   function linkButtonName(link) {
     if (!link) return "下载";
     const ch = channelName(link.channel);
     if (link.channel === "github") return "GitHub Release";
     if (link.channel === "direct" || link.channel === "other") {
-      // 无明确渠道时才用自定义短标签（排除提取码文案）
       const lab = String(link.label || "").trim();
       if (lab && !/(?:提取码|密码|pwd)/i.test(lab) && !extractCode(lab)) {
         return lab.slice(0, 12);
       }
     }
     return ch || "下载";
+  }
+
+  /** 把提取码写入网盘 URL（百度支持 ?pwd= 自动填入） */
+  function withExtractCode(url, channel, code) {
+    const u = String(url || "").trim();
+    const pwd = String(code || "").trim();
+    if (!u || !pwd) return u;
+    try {
+      const parsed = new URL(u);
+      const host = parsed.hostname.toLowerCase();
+      const ch = String(channel || "").toLowerCase();
+      const isBaidu =
+        ch === "baidu" ||
+        host.includes("pan.baidu.com") ||
+        host.includes("yun.baidu.com");
+      if (isBaidu) {
+        if (!parsed.searchParams.get("pwd")) parsed.searchParams.set("pwd", pwd);
+        return parsed.toString();
+      }
+      // 其他网盘：若已有 pwd 参数则补上
+      if (!parsed.searchParams.get("pwd") && !parsed.searchParams.get("password")) {
+        if (ch === "lanzou" || host.includes("lanzou") || host.includes("lanzo")) {
+          parsed.searchParams.set("pwd", pwd);
+          return parsed.toString();
+        }
+      }
+      return u;
+    } catch (_) {
+      return u;
+    }
   }
 
   function itemLinks(item) {
@@ -265,8 +318,10 @@
 
     channels: LINK_CHANNELS,
     channelName,
+    channelIcon,
     extractCode,
     linkButtonName,
+    withExtractCode,
     itemLinks,
 
     async list() {
