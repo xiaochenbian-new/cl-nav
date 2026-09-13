@@ -291,6 +291,7 @@
       { id: "baidu", name: "百度网盘" },
       { id: "quark", name: "夸克网盘" },
       { id: "aliyun", name: "阿里云盘" },
+      { id: "123", name: "123网盘" },
       { id: "other", name: "其他" },
     ];
     return channels

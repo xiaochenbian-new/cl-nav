@@ -213,12 +213,23 @@
               ? links
                   .map((l, idx) => {
                     const name =
-                      (l.label && String(l.label).trim()) ||
-                      (window.LibraryStorage?.channelName?.(l.channel) || l.channel || "下载");
-                    const primary = idx === 0 ? " primary" : "";
-                    return `<button type="button" class="lib-btn${primary}" data-dl="${esc(it.id)}" data-dl-idx="${idx}" title="${esc(
-                      l.url
-                    )}">${esc(name)}</button>`;
+                      window.LibraryStorage?.linkButtonName?.(l) ||
+                      window.LibraryStorage?.channelName?.(l.channel) ||
+                      "下载";
+                    const code =
+                      window.LibraryStorage?.extractCode?.(l.label) || "";
+                    const tip = code
+                      ? `${name} · 提取码 ${code}（点击复制并打开）`
+                      : l.url || name;
+                    // 多渠道同级：不标 primary；仅单直链/GitHub 保留主按钮样式
+                    const primary =
+                      links.length === 1 &&
+                      (l.channel === "github" || l.channel === "direct")
+                        ? " primary"
+                        : "";
+                    return `<button type="button" class="lib-btn${primary}" data-dl="${esc(it.id)}" data-dl-idx="${idx}" data-pwd="${esc(
+                      code
+                    )}" title="${esc(tip)}">${esc(name)}</button>`;
                   })
                   .join("")
               : `<button type="button" class="lib-btn primary" data-dl="${esc(it.id)}" data-dl-idx="0">下载</button>`
@@ -279,6 +290,18 @@
         const links = LibraryStorage.itemLinks(item);
         const link = links[idx] || links[0] || null;
         try {
+          const pwd =
+            (btn.dataset.pwd || "").trim() ||
+            LibraryStorage.extractCode?.(link?.label) ||
+            "";
+          if (pwd) {
+            try {
+              await navigator.clipboard.writeText(pwd);
+              this.setStatus(`已复制提取码 ${pwd}，正在打开网盘…`, "ok");
+            } catch (_) {
+              this.setStatus(`提取码：${pwd}（复制失败，请手动输入）`, "ok");
+            }
+          }
           const url = await LibraryStorage.getDownloadUrl(item, link);
           window.open(url, "_blank", "noopener");
         } catch (err) {

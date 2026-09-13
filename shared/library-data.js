@@ -206,6 +206,7 @@
     { id: "baidu", name: "百度网盘" },
     { id: "quark", name: "夸克网盘" },
     { id: "aliyun", name: "阿里云盘" },
+    { id: "123", name: "123网盘" },
     { id: "direct", name: "直链" },
     { id: "other", name: "其他" },
   ];
@@ -213,6 +214,30 @@
   function channelName(id) {
     const hit = LINK_CHANNELS.find((c) => c.id === id);
     return hit ? hit.name : id || "其他";
+  }
+
+  /** 从 label / 说明里解析提取码 */
+  function extractCode(label) {
+    const s = String(label || "").trim();
+    if (!s) return "";
+    const m = /(?:提取码|密码|pwd)[:：\s]*([a-zA-Z0-9]{3,8})/i.exec(s);
+    if (m) return m[1];
+    if (/^[a-zA-Z0-9]{4}$/.test(s)) return s;
+    return "";
+  }
+
+  function linkButtonName(link) {
+    if (!link) return "下载";
+    const ch = channelName(link.channel);
+    if (link.channel === "github") return "GitHub Release";
+    if (link.channel === "direct" || link.channel === "other") {
+      // 无明确渠道时才用自定义短标签（排除提取码文案）
+      const lab = String(link.label || "").trim();
+      if (lab && !/(?:提取码|密码|pwd)/i.test(lab) && !extractCode(lab)) {
+        return lab.slice(0, 12);
+      }
+    }
+    return ch || "下载";
   }
 
   function itemLinks(item) {
@@ -240,6 +265,8 @@
 
     channels: LINK_CHANNELS,
     channelName,
+    extractCode,
+    linkButtonName,
     itemLinks,
 
     async list() {
