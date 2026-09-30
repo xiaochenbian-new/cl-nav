@@ -385,6 +385,30 @@
       persist();
     },
 
+    /** Reorder links by original indices in their new order (grid drag). */
+    reorderLinksByOrder(catId, orderedIndices) {
+      const cat = state.categories.find((c) => c.id === catId);
+      if (!cat) return;
+      const arr = cat.links;
+      const idxs = (orderedIndices || []).map((i) => +i);
+      if (idxs.length !== arr.length) return;
+      const seen = new Set();
+      for (const i of idxs) {
+        if (!Number.isInteger(i) || i < 0 || i >= arr.length || seen.has(i)) return;
+        seen.add(i);
+      }
+      cat.links = idxs.map((i) => arr[i]);
+      persist();
+    },
+
+    reorderCategories(from, to) {
+      const arr = state.categories;
+      if (from === to || from < 0 || to < 0 || from >= arr.length || to >= arr.length) return;
+      const [item] = arr.splice(from, 1);
+      arr.splice(to, 0, item);
+      persist();
+    },
+
     addQuickLink(link) {
       state.quickLinks.push(normalizeLink(link));
       persist();

@@ -127,6 +127,65 @@
 
 .cfg-list { display: grid; gap: 0.45rem; }
 
+.cfg-link-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.5rem;
+  align-content: start;
+}
+
+.cfg-link-grid-empty {
+  grid-column: 1 / -1;
+}
+
+.cfg-link-card {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0.4rem;
+  padding: 0.55rem 0.55rem;
+  min-width: 0;
+}
+
+.cfg-link-card-top {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.cfg-link-card .cfg-item-main {
+  flex: 1;
+}
+
+.cfg-link-card .cfg-item-main strong {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cfg-link-card .cfg-item-actions {
+  width: 100%;
+}
+
+.cfg-link-card .cfg-item-actions button {
+  flex: 1;
+  font-size: 11px;
+  padding: 0.22rem 0.3rem;
+}
+
+@media (max-width: 980px) {
+  .cfg-link-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (max-width: 780px) {
+  .cfg-link-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+  .cfg-link-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 .cfg-item {
   display: flex;
   align-items: center;
@@ -136,7 +195,7 @@
   border: 1px solid var(--line);
   border-radius: 10px;
   background: color-mix(in srgb, var(--bg) 60%, var(--panel));
-  transition: border-color 0.12s, box-shadow 0.12s, opacity 0.12s;
+  transition: border-color 0.12s, box-shadow 0.12s, opacity 0.12s, transform 0.12s;
 }
 
 .cfg-item.dragging {
@@ -221,21 +280,48 @@
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.4rem;
+  justify-content: flex-start;
+  gap: 0.35rem;
   border: 1px solid var(--line);
   background: var(--panel);
   border-radius: 8px;
-  padding: 0.55rem 0.65rem;
+  padding: 0.55rem 0.55rem;
   font: inherit;
   cursor: pointer;
   text-align: left;
+  transition: border-color 0.12s, box-shadow 0.12s, opacity 0.12s;
 }
 
 .cfg-cat.active {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+.cfg-cat.dragging {
+  opacity: 0.45;
+}
+
+.cfg-cat.drag-over {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.cfg-cat .cfg-drag {
+  color: inherit;
+  opacity: 0.55;
+}
+
+.cfg-cat.active .cfg-drag {
+  opacity: 0.75;
+}
+
+.cfg-cat-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cfg-cat em {
@@ -245,6 +331,7 @@
   background: var(--bg);
   padding: 0.1rem 0.4rem;
   border-radius: 999px;
+  flex-shrink: 0;
 }
 
 .cfg-data-actions { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 0.55rem; }

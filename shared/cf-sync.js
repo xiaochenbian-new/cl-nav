@@ -145,14 +145,24 @@
 
   let pushTimer = null;
 
-  function schedulePush() {
+  function schedulePush(delayMs = 400) {
     const prefs = loadPrefs();
     if (!prefs.autoSync || !isReady(prefs)) return;
     window.clearTimeout(pushTimer);
     // 短防抖：连续编辑合并为一次上传，停手后很快推到云端
     pushTimer = window.setTimeout(() => {
+      pushTimer = null;
       sync("PUSH").catch(() => {});
-    }, 400);
+    }, Math.max(0, delayMs));
+  }
+
+  /** Flush pending auto-sync immediately (add site / reorder). */
+  function flushPush() {
+    const prefs = loadPrefs();
+    if (!prefs.autoSync || !isReady(prefs)) return;
+    window.clearTimeout(pushTimer);
+    pushTimer = null;
+    sync("PUSH").catch(() => {});
   }
 
   async function exportFullBackup() {
@@ -275,6 +285,7 @@
     backupNow,
     restoreNow,
     schedulePush,
+    flushPush,
     markDirty() {
       savePrefs({ localDirty: true });
       schedulePush();

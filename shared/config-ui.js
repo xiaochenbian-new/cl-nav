@@ -16,6 +16,16 @@
     }
   }
 
+  /** Push auto-backup / CF sync immediately when enabled. */
+  function flushAutoBackup() {
+    try {
+      window.NavWebDav?.flushPush?.();
+    } catch (_) {}
+    try {
+      window.NavCfSync?.flushPush?.();
+    } catch (_) {}
+  }
+
   /** HTML5 drag-reorder for .cfg-item lists (drag from ⠿ handle) */
   function bindDragSort(listEl, { onReorder }) {
     if (!listEl) return;
@@ -90,6 +100,180 @@
         onReorder(from, to);
       });
     });
+  }
+
+  /**
+   * Grid drag-reorder like phone app icons: while dragging, the item
+   * takes the hovered slot and siblings shift to fill the gap; persist on end.
+   */
+  function bindGridDragSort(listEl, { onReorder }) {
+    if (!listEl) return;
+    let dragEl = null;
+    let startOrder = null;
+    let moved = false;
+
+    const items = () => [...listEl.querySelectorAll(".cfg-item[data-sortable]")];
+
+    listEl.querySelectorAll(".cfg-item[data-sortable]").forEach((item) => {
+      const handle = item.querySelector(".cfg-drag");
+      item.setAttribute("draggable", "false");
+
+      const setDrag = (on) => {
+        item.setAttribute("draggable", on ? "true" : "false");
+      };
+
+      if (handle) {
+        handle.addEventListener("mousedown", () => setDrag(true));
+        handle.addEventListener("touchstart", () => setDrag(true), { passive: true });
+      }
+      item.addEventListener("mouseup", () => {
+        if (!dragEl) setDrag(false);
+      });
+      item.addEventListener("mouseleave", () => {
+        if (!dragEl) setDrag(false);
+      });
+
+      item.addEventListener("dragstart", (e) => {
+        if (item.getAttribute("draggable") !== "true") {
+          e.preventDefault();
+          return;
+        }
+        dragEl = item;
+        moved = false;
+        startOrder = items().map((el) => el.dataset.li);
+        item.classList.add("dragging");
+        try {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", "sort");
+        } catch (_) {}
+      });
+
+      item.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        if (!dragEl || dragEl === item) return;
+        const all = items();
+        const from = all.indexOf(dragEl);
+        const to = all.indexOf(item);
+        if (from < 0 || to < 0 || from === to) return;
+        // Live reflow: insert dragged card into the hovered slot
+        if (from < to) item.after(dragEl);
+        else item.before(dragEl);
+        moved = true;
+        try {
+          e.dataTransfer.dropEffect = "move";
+        } catch (_) {}
+      });
+
+      item.addEventListener("drop", (e) => {
+        e.preventDefault();
+      });
+
+      item.addEventListener("dragend", () => {
+        item.classList.remove("dragging");
+        setDrag(false);
+        const endOrder = items().map((el) => el.dataset.li);
+        const changed =
+          moved &&
+          startOrder &&
+          endOrder.length === startOrder.length &&
+          endOrder.some((v, i) => v !== startOrder[i]);
+        dragEl = null;
+        startOrder = null;
+        moved = false;
+        if (changed) onReorder(endOrder.map((v) => +v));
+      });
+    });
+  }
+
+  /** Vertical drag-reorder for category sidebar buttons */
+  function bindCatListDrag(listEl, { onReorder }) {
+    if (!listEl || listEl.dataset.dragBound === "1") return;
+    listEl.dataset.dragBound = "1";
+    let dragEl = null;
+    let suppressClick = false;
+
+    listEl.addEventListener("mousedown", (e) => {
+      const handle = e.target.closest(".cfg-drag");
+      const cat = e.target.closest(".cfg-cat[data-sortable]");
+      if (!handle || !cat || !listEl.contains(cat)) return;
+      cat.setAttribute("draggable", "true");
+    });
+
+    listEl.addEventListener("mouseup", () => {
+      listEl.querySelectorAll(".cfg-cat[draggable='true']").forEach((el) => {
+        if (!dragEl) el.setAttribute("draggable", "false");
+      });
+    });
+
+    listEl.addEventListener("dragstart", (e) => {
+      const cat = e.target.closest(".cfg-cat[data-sortable]");
+      if (!cat || !listEl.contains(cat) || cat.getAttribute("draggable") !== "true") {
+        e.preventDefault();
+        return;
+      }
+      dragEl = cat;
+      suppressClick = false;
+      cat.classList.add("dragging");
+      try {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", cat.dataset.cat || "cat");
+      } catch (_) {}
+    });
+
+    listEl.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      const cat = e.target.closest(".cfg-cat[data-sortable]");
+      if (!dragEl || !cat || cat === dragEl || !listEl.contains(cat)) return;
+      const all = [...listEl.querySelectorAll(".cfg-cat[data-sortable]")];
+      const from = all.indexOf(dragEl);
+      const to = all.indexOf(cat);
+      if (from < 0 || to < 0 || from === to) return;
+      if (from < to) cat.after(dragEl);
+      else cat.before(dragEl);
+      suppressClick = true;
+      listEl.querySelectorAll(".cfg-cat").forEach((el) => el.classList.remove("drag-over"));
+      cat.classList.add("drag-over");
+      try {
+        e.dataTransfer.dropEffect = "move";
+      } catch (_) {}
+    });
+
+    listEl.addEventListener("drop", (e) => {
+      e.preventDefault();
+    });
+
+    listEl.addEventListener("dragend", () => {
+      listEl.querySelectorAll(".cfg-cat").forEach((el) => {
+        el.classList.remove("dragging", "drag-over");
+        el.setAttribute("draggable", "false");
+      });
+      if (!dragEl) return;
+      const startId = dragEl.dataset.cat;
+      const didMove = suppressClick;
+      dragEl = null;
+      window.setTimeout(() => {
+        suppressClick = false;
+      }, 0);
+      if (!didMove) return;
+      const cfg = window.NavStore?.get?.();
+      if (!cfg) return;
+      const endIds = [...listEl.querySelectorAll(".cfg-cat[data-sortable]")].map((el) => el.dataset.cat);
+      const origIds = cfg.categories.map((c) => c.id);
+      const fromIdx = origIds.indexOf(startId);
+      const toIdx = endIds.indexOf(startId);
+      if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
+      onReorder(fromIdx, toIdx);
+    });
+
+    listEl.addEventListener(
+      "click",
+      (e) => {
+        if (!suppressClick) return;
+        e.preventDefault();
+        e.stopPropagation();
+      },
+      true
+    );
   }
 
   /** Horizontal drag-reorder for library category chips */
@@ -594,12 +778,14 @@
                 <strong>分类</strong>
                 <button type="button" class="cfg-btn primary" id="cfgAddCat">＋ 新建</button>
               </div>
+              <p class="settings-tip" style="margin:0 0 0.45rem">按住左侧 ⠿ 拖动可排序</p>
               <div class="cfg-list" id="cfgCatList">
                 ${cfg.categories
                   .map(
-                    (c) => `
-                  <button type="button" class="cfg-cat ${c.id === this.selectedCatId ? "active" : ""}" data-cat="${c.id}">
-                    <span>${esc(c.name)}</span>
+                    (c, i) => `
+                  <button type="button" class="cfg-cat ${c.id === this.selectedCatId ? "active" : ""}" data-sortable data-cat="${c.id}" data-ci="${i}">
+                    <span class="cfg-drag" title="拖动排序" aria-hidden="true">⠿</span>
+                    <span class="cfg-cat-label">${esc(c.name)}</span>
                     <em>${c.links.length}</em>
                   </button>`
                   )
@@ -622,7 +808,7 @@
                   }
                 </div>
               </div>
-              <p class="settings-tip" style="margin:0 0 0.45rem">按住左侧 ⠿ 拖动可排序；勾选后可批量删除</p>
+              <p class="settings-tip" style="margin:0 0 0.45rem">按住 ⠿ 拖动排序（与手机图标一样自动补位）；勾选后可批量删除</p>
               ${
                 selected && selected.links.length
                   ? `<div class="cfg-batch-bar">
@@ -632,18 +818,20 @@
                     </div>`
                   : ""
               }
-              <div class="cfg-list" id="cfgLinkList">
+              <div class="cfg-list cfg-link-grid" id="cfgLinkList">
                 ${
                   selected
                     ? selected.links.length
                       ? selected.links
                           .map(
                             (l, i) => `
-                    <div class="cfg-item" data-sortable data-li="${i}">
-                      <label class="cfg-check" title="选择">
-                        <input type="checkbox" data-l-check="${i}" />
-                      </label>
-                      <span class="cfg-drag" title="拖动排序" aria-hidden="true">⠿</span>
+                    <div class="cfg-item cfg-link-card" data-sortable data-li="${i}">
+                      <div class="cfg-link-card-top">
+                        <span class="cfg-drag" title="拖动排序" aria-hidden="true">⠿</span>
+                        <label class="cfg-check" title="选择">
+                          <input type="checkbox" data-l-check="${i}" />
+                        </label>
+                      </div>
                       <div class="cfg-item-main">
                         <strong>${esc(l.title)}</strong>
                         <span>${esc(l.desc || l.url)}</span>
@@ -655,8 +843,8 @@
                     </div>`
                           )
                           .join("")
-                      : `<p class="settings-tip">该分类还没有网站，点击「＋ 网站」添加。</p>`
-                    : `<p class="settings-tip">请先选择或新建分类。</p>`
+                      : `<p class="settings-tip cfg-link-grid-empty">该分类还没有网站，点击「＋ 网站」添加。</p>`
+                    : `<p class="settings-tip cfg-link-grid-empty">请先选择或新建分类。</p>`
                 }
               </div>
             </div>
@@ -1554,6 +1742,7 @@
         if (!link) return;
         this.activeTab = "quick";
         NavStore.addQuickLink(link);
+        flushAutoBackup();
       });
 
       root.querySelectorAll("[data-q-edit]").forEach((btn) => {
@@ -1564,6 +1753,7 @@
           if (!link) return;
           this.activeTab = "quick";
           NavStore.updateQuickLink(i, link);
+          flushAutoBackup();
         });
       });
 
@@ -1572,6 +1762,7 @@
           if (!confirm("确定删除该常用网站？")) return;
           this.activeTab = "quick";
           NavStore.removeQuickLink(+btn.dataset.qDel);
+          flushAutoBackup();
         });
       });
 
@@ -1579,6 +1770,7 @@
         onReorder: (from, to) => {
           this.activeTab = "quick";
           NavStore.reorderQuickLinks(from, to);
+          flushAutoBackup();
         },
       });
 
@@ -1588,14 +1780,23 @@
         this.activeTab = "cats";
         const cat = NavStore.addCategory(name.trim());
         this.selectedCatId = cat.id;
+        flushAutoBackup();
       });
 
-      root.querySelectorAll("[data-cat]").forEach((btn) => {
+      root.querySelectorAll("#cfgCatList [data-cat]").forEach((btn) => {
         btn.addEventListener("click", () => {
           this.selectedCatId = btn.dataset.cat;
           this.activeTab = "cats";
           this.render();
         });
+      });
+
+      bindCatListDrag(root.querySelector("#cfgCatList"), {
+        onReorder: (from, to) => {
+          this.activeTab = "cats";
+          NavStore.reorderCategories(from, to);
+          flushAutoBackup();
+        },
       });
 
       root.querySelector("#cfgRenameCat")?.addEventListener("click", () => {
@@ -1605,16 +1806,19 @@
         if (name == null || !name.trim()) return;
         this.activeTab = "cats";
         NavStore.updateCategory(cat.id, { name: name.trim() });
+        flushAutoBackup();
       });
 
       root.querySelector("#cfgUpCat")?.addEventListener("click", () => {
         this.activeTab = "cats";
         NavStore.moveCategory(this.selectedCatId, -1);
+        flushAutoBackup();
       });
 
       root.querySelector("#cfgDownCat")?.addEventListener("click", () => {
         this.activeTab = "cats";
         NavStore.moveCategory(this.selectedCatId, 1);
+        flushAutoBackup();
       });
 
       root.querySelector("#cfgDelCat")?.addEventListener("click", () => {
@@ -1624,6 +1828,7 @@
         this.activeTab = "cats";
         NavStore.removeCategory(cat.id);
         this.selectedCatId = "";
+        flushAutoBackup();
       });
 
       root.querySelector("#cfgAddLink")?.addEventListener("click", async () => {
@@ -1632,6 +1837,7 @@
         if (!link) return;
         this.activeTab = "cats";
         NavStore.addLink(this.selectedCatId, link);
+        flushAutoBackup();
       });
 
       root.querySelectorAll("[data-l-edit]").forEach((btn) => {
@@ -1643,6 +1849,7 @@
           if (!link) return;
           this.activeTab = "cats";
           NavStore.updateLink(this.selectedCatId, i, link);
+          flushAutoBackup();
         });
       });
 
@@ -1651,6 +1858,7 @@
           if (!confirm("确定删除该网站？")) return;
           this.activeTab = "cats";
           NavStore.removeLink(this.selectedCatId, +btn.dataset.lDel);
+          flushAutoBackup();
         });
       });
 
@@ -1687,12 +1895,14 @@
         if (!confirm(`确定删除选中的 ${indices.length} 个网站？`)) return;
         this.activeTab = "cats";
         NavStore.removeLinks(this.selectedCatId, indices);
+        flushAutoBackup();
       });
 
-      bindDragSort(root.querySelector("#cfgLinkList"), {
-        onReorder: (from, to) => {
+      bindGridDragSort(root.querySelector("#cfgLinkList"), {
+        onReorder: (orderedIndices) => {
           this.activeTab = "cats";
-          NavStore.reorderLinks(this.selectedCatId, from, to);
+          NavStore.reorderLinksByOrder(this.selectedCatId, orderedIndices);
+          flushAutoBackup();
         },
       });
 
