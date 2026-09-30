@@ -391,7 +391,7 @@
   border-radius: 8px;
   padding: 0.55rem 0.55rem;
   font: inherit;
-  cursor: pointer;
+  cursor: grab;
   text-align: left;
   transition: border-color 0.12s, box-shadow 0.12s, opacity 0.12s;
 }
@@ -404,11 +404,14 @@
 
 .cfg-cat.dragging {
   opacity: 0.45;
+  cursor: grabbing;
 }
 
-.cfg-cat.drag-over {
+.cfg-cat.drop-target {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 .cfg-cat .cfg-drag {

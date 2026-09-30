@@ -116,20 +116,35 @@
     });
   }
 
+  /** Shared drag state so category list can accept site-card drops reliably. */
+  const paneDrag = {
+    kind: null, // 'link' | 'cat' | null
+    linkEl: null,
+    linkIndex: -1,
+  };
+
   /**
    * Grid drag-reorder like phone app icons: while dragging, the item
    * takes the hovered slot and siblings shift to fill the gap; persist on end.
    * Drag from anywhere on the card except interactive controls.
+   * Optional: drop onto category buttons to move the link.
    */
-  function bindGridDragSort(listEl, { onReorder }) {
+  function bindGridDragSort(listEl, { onReorder, catListEl, selectedCatId, onMoveToCategory }) {
     if (!listEl) return;
     let dragEl = null;
     let startOrder = null;
     let moved = false;
+    let dropCatId = null;
+    let movedToCat = false;
 
     const items = () => [...listEl.querySelectorAll(".cfg-item[data-sortable]")];
     const isInteractive = (t) =>
       !!t.closest("button, input, label, a, .cfg-link-check, .cfg-link-del, .cfg-link-edit");
+
+    const clearCatDrop = () => {
+      dropCatId = null;
+      catListEl?.querySelectorAll(".cfg-cat").forEach((el) => el.classList.remove("drop-target"));
+    };
 
     listEl.querySelectorAll(".cfg-item[data-sortable]").forEach((item) => {
       item.setAttribute("draggable", "false");
@@ -142,10 +157,14 @@
         if (e.button !== 0 || isInteractive(e.target)) return;
         setDrag(true);
       });
-      item.addEventListener("touchstart", (e) => {
-        if (isInteractive(e.target)) return;
-        setDrag(true);
-      }, { passive: true });
+      item.addEventListener(
+        "touchstart",
+        (e) => {
+          if (isInteractive(e.target)) return;
+          setDrag(true);
+        },
+        { passive: true }
+      );
       item.addEventListener("mouseup", () => {
         if (!dragEl) setDrag(false);
       });
@@ -160,17 +179,23 @@
         }
         dragEl = item;
         moved = false;
+        movedToCat = false;
+        dropCatId = null;
         startOrder = items().map((el) => el.dataset.li);
+        paneDrag.kind = "link";
+        paneDrag.linkEl = item;
+        paneDrag.linkIndex = +item.dataset.li;
         item.classList.add("dragging");
         try {
           e.dataTransfer.effectAllowed = "move";
-          e.dataTransfer.setData("text/plain", "sort");
+          e.dataTransfer.setData("text/plain", "link:" + (item.dataset.li || "0"));
         } catch (_) {}
       });
 
       item.addEventListener("dragover", (e) => {
         e.preventDefault();
         if (!dragEl || dragEl === item) return;
+        clearCatDrop();
         const all = items();
         const from = all.indexOf(dragEl);
         const to = all.indexOf(item);
@@ -192,19 +217,67 @@
         setDrag(false);
         const endOrder = items().map((el) => el.dataset.li);
         const changed =
+          !movedToCat &&
           moved &&
           startOrder &&
           endOrder.length === startOrder.length &&
           endOrder.some((v, i) => v !== startOrder[i]);
+        clearCatDrop();
         dragEl = null;
         startOrder = null;
         moved = false;
+        paneDrag.kind = null;
+        paneDrag.linkEl = null;
+        paneDrag.linkIndex = -1;
         if (changed) onReorder(endOrder.map((v) => +v));
+        movedToCat = false;
       });
     });
+
+    if (catListEl && typeof onMoveToCategory === "function") {
+      catListEl.addEventListener("dragover", (e) => {
+        if (paneDrag.kind !== "link" || !dragEl) return;
+        const cat = e.target.closest(".cfg-cat[data-cat]");
+        if (!cat || !catListEl.contains(cat)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const id = cat.dataset.cat;
+        catListEl.querySelectorAll(".cfg-cat").forEach((el) => el.classList.remove("drop-target"));
+        if (id && id !== selectedCatId) {
+          cat.classList.add("drop-target");
+          dropCatId = id;
+        } else {
+          dropCatId = null;
+        }
+        try {
+          e.dataTransfer.dropEffect = "move";
+        } catch (_) {}
+      });
+
+      catListEl.addEventListener("dragleave", (e) => {
+        if (paneDrag.kind !== "link") return;
+        const to = e.relatedTarget;
+        if (to && catListEl.contains(to)) return;
+        clearCatDrop();
+      });
+
+      catListEl.addEventListener("drop", (e) => {
+        if (paneDrag.kind !== "link" || !dragEl) return;
+        const cat = e.target.closest(".cfg-cat[data-cat]");
+        e.preventDefault();
+        e.stopPropagation();
+        const id = cat?.dataset.cat || dropCatId;
+        const idx = Number.isInteger(paneDrag.linkIndex) ? paneDrag.linkIndex : +dragEl.dataset.li;
+        clearCatDrop();
+        if (!id || id === selectedCatId || !Number.isInteger(idx) || idx < 0) return;
+        movedToCat = true;
+        // Defer so dragend can finish before store re-render tears down the DOM
+        window.setTimeout(() => onMoveToCategory(idx, id), 0);
+      });
+    }
   }
 
-  /** Vertical drag-reorder for category sidebar buttons */
+  /** Vertical drag-reorder for category sidebar — press anywhere (same as site cards). */
   function bindCatListDrag(listEl, { onReorder }) {
     if (!listEl || listEl.dataset.dragBound === "1") return;
     listEl.dataset.dragBound = "1";
@@ -212,11 +285,21 @@
     let suppressClick = false;
 
     listEl.addEventListener("mousedown", (e) => {
-      const handle = e.target.closest(".cfg-drag");
+      if (e.button !== 0) return;
       const cat = e.target.closest(".cfg-cat[data-sortable]");
-      if (!handle || !cat || !listEl.contains(cat)) return;
+      if (!cat || !listEl.contains(cat)) return;
       cat.setAttribute("draggable", "true");
     });
+
+    listEl.addEventListener(
+      "touchstart",
+      (e) => {
+        const cat = e.target.closest(".cfg-cat[data-sortable]");
+        if (!cat || !listEl.contains(cat)) return;
+        cat.setAttribute("draggable", "true");
+      },
+      { passive: true }
+    );
 
     listEl.addEventListener("mouseup", () => {
       listEl.querySelectorAll(".cfg-cat[draggable='true']").forEach((el) => {
@@ -225,6 +308,10 @@
     });
 
     listEl.addEventListener("dragstart", (e) => {
+      if (paneDrag.kind === "link") {
+        e.preventDefault();
+        return;
+      }
       const cat = e.target.closest(".cfg-cat[data-sortable]");
       if (!cat || !listEl.contains(cat) || cat.getAttribute("draggable") !== "true") {
         e.preventDefault();
@@ -232,17 +319,20 @@
       }
       dragEl = cat;
       suppressClick = false;
+      paneDrag.kind = "cat";
       cat.classList.add("dragging");
       try {
         e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", cat.dataset.cat || "cat");
+        e.dataTransfer.setData("text/plain", "cat:" + (cat.dataset.cat || ""));
       } catch (_) {}
     });
 
     listEl.addEventListener("dragover", (e) => {
+      if (paneDrag.kind === "link") return;
+      if (!dragEl) return;
       e.preventDefault();
       const cat = e.target.closest(".cfg-cat[data-sortable]");
-      if (!dragEl || !cat || cat === dragEl || !listEl.contains(cat)) return;
+      if (!cat || cat === dragEl || !listEl.contains(cat)) return;
       const all = [...listEl.querySelectorAll(".cfg-cat[data-sortable]")];
       const from = all.indexOf(dragEl);
       const to = all.indexOf(cat);
@@ -258,14 +348,16 @@
     });
 
     listEl.addEventListener("drop", (e) => {
+      if (paneDrag.kind === "link") return;
       e.preventDefault();
     });
 
     listEl.addEventListener("dragend", () => {
       listEl.querySelectorAll(".cfg-cat").forEach((el) => {
-        el.classList.remove("dragging", "drag-over");
+        el.classList.remove("dragging", "drag-over", "drop-target");
         el.setAttribute("draggable", "false");
       });
+      if (paneDrag.kind === "cat") paneDrag.kind = null;
       if (!dragEl) return;
       const startId = dragEl.dataset.cat;
       const didMove = suppressClick;
@@ -797,13 +889,12 @@
                 <strong>分类</strong>
                 <button type="button" class="cfg-btn primary" id="cfgAddCat">＋ 新建</button>
               </div>
-              <p class="settings-tip" style="margin:0 0 0.45rem">按住左侧 ⠿ 拖动可排序</p>
+              <p class="settings-tip" style="margin:0 0 0.45rem">按住分类项可拖动排序；也可把右侧网站拖到分类上迁移</p>
               <div class="cfg-list" id="cfgCatList">
                 ${cfg.categories
                   .map(
                     (c, i) => `
                   <button type="button" class="cfg-cat ${c.id === this.selectedCatId ? "active" : ""}" data-sortable data-cat="${c.id}" data-ci="${i}">
-                    <span class="cfg-drag" title="拖动排序" aria-hidden="true">⠿</span>
                     <span class="cfg-cat-label">${esc(c.name)}</span>
                     <em>${c.links.length}</em>
                   </button>`
@@ -827,7 +918,7 @@
                   }
                 </div>
               </div>
-              <p class="settings-tip" style="margin:0 0 0.45rem">拖动卡片可排序（与手机图标一样自动补位）；左上角勾选后可批量删除</p>
+              <p class="settings-tip" style="margin:0 0 0.45rem">拖动卡片可排序（自动补位）；拖到左侧分类可迁移；勾选后可批量删除</p>
               ${
                 selected && selected.links.length
                   ? `<div class="cfg-batch-bar">
@@ -1922,6 +2013,13 @@
           this.activeTab = "cats";
           NavStore.reorderLinksByOrder(this.selectedCatId, orderedIndices);
           flushAutoBackup();
+        },
+        catListEl: root.querySelector("#cfgCatList"),
+        selectedCatId: this.selectedCatId,
+        onMoveToCategory: (linkIndex, toCatId) => {
+          this.activeTab = "cats";
+          const ok = NavStore.moveLinkToCategory(this.selectedCatId, linkIndex, toCatId);
+          if (ok) flushAutoBackup();
         },
       });
 

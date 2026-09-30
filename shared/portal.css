@@ -328,6 +328,7 @@ img { display: block; }
   flex-wrap: wrap;
   gap: 0.55rem;
   margin-top: 0.55rem;
+  margin-bottom: 0.55rem;
   color: var(--muted);
   font-size: 12px;
 }

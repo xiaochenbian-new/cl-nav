@@ -501,6 +501,20 @@
       persist();
     },
 
+    /** Move a link from one category to another (append to target). */
+    moveLinkToCategory(fromCatId, linkIndex, toCatId) {
+      if (!fromCatId || !toCatId || fromCatId === toCatId) return false;
+      const from = state.categories.find((c) => c.id === fromCatId);
+      const to = state.categories.find((c) => c.id === toCatId);
+      if (!from || !to) return false;
+      const i = +linkIndex;
+      if (!Number.isInteger(i) || i < 0 || i >= from.links.length) return false;
+      const [link] = from.links.splice(i, 1);
+      to.links.push(link);
+      persist();
+      return true;
+    },
+
     moveQuickLink(index, dir) {
       const j = index + dir;
       if (index < 0 || j < 0 || index >= state.quickLinks.length || j >= state.quickLinks.length) return;
