@@ -16,6 +16,20 @@
     }
   }
 
+  function linkCardIconHtml(link) {
+    const domain = link.domain || domainFromUrl(link.url);
+    if (domain) {
+      const src =
+        (window.Portal && typeof Portal.favicon === "function" && Portal.favicon(domain)) ||
+        `https://icons.duckduckgo.com/ip3/${encodeURIComponent(domain)}.ico`;
+      return `<img src="${esc(src)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-domain="${esc(
+        domain
+      )}" data-step="0" onerror="Portal.onFaviconError(this)" />`;
+    }
+    const ch = String(link.title || "?").slice(0, 1);
+    return `<span class="site-fallback">${esc(ch)}</span>`;
+  }
+
   /** Push auto-backup / CF sync immediately when enabled. */
   function flushAutoBackup() {
     try {
@@ -105,6 +119,7 @@
   /**
    * Grid drag-reorder like phone app icons: while dragging, the item
    * takes the hovered slot and siblings shift to fill the gap; persist on end.
+   * Drag from anywhere on the card except interactive controls.
    */
   function bindGridDragSort(listEl, { onReorder }) {
     if (!listEl) return;
@@ -113,19 +128,24 @@
     let moved = false;
 
     const items = () => [...listEl.querySelectorAll(".cfg-item[data-sortable]")];
+    const isInteractive = (t) =>
+      !!t.closest("button, input, label, a, .cfg-link-check, .cfg-link-del, .cfg-link-edit");
 
     listEl.querySelectorAll(".cfg-item[data-sortable]").forEach((item) => {
-      const handle = item.querySelector(".cfg-drag");
       item.setAttribute("draggable", "false");
 
       const setDrag = (on) => {
         item.setAttribute("draggable", on ? "true" : "false");
       };
 
-      if (handle) {
-        handle.addEventListener("mousedown", () => setDrag(true));
-        handle.addEventListener("touchstart", () => setDrag(true), { passive: true });
-      }
+      item.addEventListener("mousedown", (e) => {
+        if (e.button !== 0 || isInteractive(e.target)) return;
+        setDrag(true);
+      });
+      item.addEventListener("touchstart", (e) => {
+        if (isInteractive(e.target)) return;
+        setDrag(true);
+      }, { passive: true });
       item.addEventListener("mouseup", () => {
         if (!dragEl) setDrag(false);
       });
@@ -155,7 +175,6 @@
         const from = all.indexOf(dragEl);
         const to = all.indexOf(item);
         if (from < 0 || to < 0 || from === to) return;
-        // Live reflow: insert dragged card into the hovered slot
         if (from < to) item.after(dragEl);
         else item.before(dragEl);
         moved = true;
@@ -808,7 +827,7 @@
                   }
                 </div>
               </div>
-              <p class="settings-tip" style="margin:0 0 0.45rem">按住 ⠿ 拖动排序（与手机图标一样自动补位）；勾选后可批量删除</p>
+              <p class="settings-tip" style="margin:0 0 0.45rem">拖动卡片可排序（与手机图标一样自动补位）；左上角勾选后可批量删除</p>
               ${
                 selected && selected.links.length
                   ? `<div class="cfg-batch-bar">
@@ -823,25 +842,25 @@
                   selected
                     ? selected.links.length
                       ? selected.links
-                          .map(
-                            (l, i) => `
-                    <div class="cfg-item cfg-link-card" data-sortable data-li="${i}">
-                      <div class="cfg-link-card-top">
-                        <span class="cfg-drag" title="拖动排序" aria-hidden="true">⠿</span>
-                        <label class="cfg-check" title="选择">
-                          <input type="checkbox" data-l-check="${i}" />
-                        </label>
+                          .map((l, i) => {
+                            const domain = l.domain || domainFromUrl(l.url);
+                            const desc = l.desc || domain || l.url || "";
+                            return `
+                    <div class="cfg-item cfg-link-card" data-sortable data-li="${i}" title="${esc(
+                              l.title || desc
+                            )}">
+                      <label class="cfg-link-check" title="选择">
+                        <input type="checkbox" data-l-check="${i}" />
+                      </label>
+                      <button type="button" class="cfg-link-del" data-l-del="${i}" title="删除">删</button>
+                      <div class="site-head">
+                        ${linkCardIconHtml(l)}
+                        <span class="site-title">${esc(l.title)}</span>
                       </div>
-                      <div class="cfg-item-main">
-                        <strong>${esc(l.title)}</strong>
-                        <span>${esc(l.desc || l.url)}</span>
-                      </div>
-                      <div class="cfg-item-actions">
-                        <button type="button" data-l-edit="${i}">编辑</button>
-                        <button type="button" data-l-del="${i}">删除</button>
-                      </div>
-                    </div>`
-                          )
+                      <p class="site-desc">${esc(desc)}</p>
+                      <button type="button" class="cfg-link-edit" data-l-edit="${i}" title="编辑">编辑</button>
+                    </div>`;
+                          })
                           .join("")
                       : `<p class="settings-tip cfg-link-grid-empty">该分类还没有网站，点击「＋ 网站」添加。</p>`
                     : `<p class="settings-tip cfg-link-grid-empty">请先选择或新建分类。</p>`
@@ -1905,6 +1924,10 @@
           flushAutoBackup();
         },
       });
+
+      try {
+        window.Portal?.hydrateFavicons?.(root.querySelector("#cfgLinkList"));
+      } catch (_) {}
 
       root.querySelector("#cfgExport")?.addEventListener("click", () => {
         const ta = root.querySelector("#cfgJson");

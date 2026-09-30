@@ -170,9 +170,9 @@
     .settings-panel[hidden] { display: none !important; }
 
     .settings-card {
-      width: min(1120px, 100%);
-      height: min(92vh, 860px);
-      max-height: min(92vh, 860px);
+      width: min(1480px, 98vw);
+      height: min(94vh, 920px);
+      max-height: min(94vh, 920px);
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 14px;
@@ -367,9 +367,9 @@
 
     .cfg-split {
       display: grid;
-      grid-template-columns: 220px 1fr;
-      gap: 0.85rem;
-      min-height: 480px;
+      grid-template-columns: 200px minmax(0, 1fr);
+      gap: 1rem;
+      min-height: 520px;
     }
 
     @media (max-width: 720px) {
@@ -734,7 +734,7 @@
       .search-row { max-width: none; grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="stylesheet" href="shared/settings.css?v=20260930a" />
+  <link rel="stylesheet" href="shared/settings.css?v=20260930b" />
 </head>
 <body>
   <div class="page">
@@ -795,7 +795,7 @@
   <script src="shared/webdav.js?v=20260930a"></script>
   <script src="shared/library-data.js?v=20260328s"></script>
   <script src="shared/portal.js"></script>
-  <script src="shared/config-ui.js?v=20260930a"></script>
+  <script src="shared/config-ui.js?v=20260930b"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
