@@ -160,6 +160,99 @@
     return mergeConfigs(buildDefaults(), cfg);
   }
 
+  /** 工作区 Web 项目：补齐「CL 应用」测试/生产入口（不删用户其它链接） */
+  function clAppsSeedLinks() {
+    const raw = (window.NAV_DATA && window.NAV_DATA.categories && window.NAV_DATA.categories.cl_apps) || {};
+    return (raw.links || []).map(normalizeLink).filter((l) => l.url);
+  }
+
+  /** 旧地址 → 规范生产/测试 URL（合并重复卡片） */
+  const CL_APPS_URL_ALIASES = {
+    "https://wangdou.win": "https://wangdou.win/",
+    "https://cl-network-disk-web.pages.dev": "https://wangdou.win/",
+    "https://cl-network-disk-web.pages.dev/": "https://wangdou.win/",
+    "https://todo.wangdou.win": "https://todo.wangdou.win/",
+    "https://cl-todo-app-web.pages.dev": "https://todo.wangdou.win/",
+    "https://cl-todo-app-web.pages.dev/": "https://todo.wangdou.win/",
+    "https://license.wangdou.win": "https://license.wangdou.win/",
+    "https://cl-license.pages.dev": "https://license.wangdou.win/",
+    "https://cl-license.pages.dev/": "https://license.wangdou.win/",
+    "https://carphone.wangdou.win": "https://carphone.wangdou.win/",
+    "https://cl-car-phone.pages.dev": "https://carphone.wangdou.win/",
+    "https://cl-car-phone.pages.dev/": "https://carphone.wangdou.win/",
+    "https://nav.wangdou.win": "https://nav.wangdou.win/",
+    "https://cl-nav.pages.dev": "https://nav.wangdou.win/",
+    "https://cl-nav.pages.dev/": "https://nav.wangdou.win/",
+    "https://ctool-nav.wangdou.win": "https://ctool-nav.wangdou.win/",
+    "https://tool-nav-10a.pages.dev": "https://ctool-nav.wangdou.win/",
+    "https://tool-nav-10a.pages.dev/": "https://ctool-nav.wangdou.win/",
+    "https://tool-nav-vbb.pages.dev": "https://ctool-nav.wangdou.win/",
+    "https://tool-nav-vbb.pages.dev/": "https://ctool-nav.wangdou.win/",
+  };
+
+  function ensureClApps(cfg) {
+    const config = normalizeConfig(cfg);
+    const seed = clAppsSeedLinks();
+    if (!seed.length) return config;
+
+    const seedByKey = new Map(seed.map((l) => [linkKey(l), l]));
+    const aliasToCanonical = new Map();
+    Object.entries(CL_APPS_URL_ALIASES).forEach(([from, to]) => {
+      aliasToCanonical.set(linkKey({ url: from }), linkKey({ url: to }));
+    });
+
+    let cat =
+      config.categories.find((c) => c.id === "cl_apps") ||
+      config.categories.find((c) => String(c.name || "").trim() === "CL 应用");
+    if (!cat) {
+      cat = { id: "cl_apps", name: "CL 应用", links: [] };
+      config.categories.unshift(cat);
+    } else {
+      cat.id = "cl_apps";
+      cat.name = "CL 应用";
+      config.categories = [
+        cat,
+        ...config.categories.filter((c) => c !== cat),
+      ];
+    }
+
+    const nextLinks = [];
+    const seen = new Set();
+
+    (cat.links || []).forEach((raw) => {
+      const link = normalizeLink(raw);
+      let key = linkKey(link);
+      if (!key) return;
+      const canonical = aliasToCanonical.get(key);
+      if (canonical && seedByKey.has(canonical)) {
+        key = canonical;
+        const seeded = seedByKey.get(canonical);
+        link.url = seeded.url;
+        link.title = seeded.title;
+        link.desc = seeded.desc || link.desc;
+        link.domain = seeded.domain || link.domain;
+      } else if (seedByKey.has(key)) {
+        const seeded = seedByKey.get(key);
+        link.title = seeded.title;
+        link.desc = seeded.desc || link.desc;
+        link.domain = seeded.domain || link.domain;
+      }
+      if (seen.has(key)) return;
+      seen.add(key);
+      nextLinks.push(link);
+    });
+
+    seed.forEach((seeded) => {
+      const key = linkKey(seeded);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      nextLinks.push(seeded);
+    });
+
+    cat.links = nextLinks;
+    return config;
+  }
+
   function normalizeConfig(parsed) {
     return {
       version: 1,
@@ -218,19 +311,36 @@
   function load() {
     try {
       const text = localStorage.getItem(KEY);
-      if (!text) return clone(buildDefaults());
+      if (!text) return ensureClApps(buildDefaults());
       const parsed = JSON.parse(text);
-      if (!parsed || !Array.isArray(parsed.categories)) return clone(buildDefaults());
+      if (!parsed || !Array.isArray(parsed.categories)) return ensureClApps(buildDefaults());
       // 本地 JSON 即为真相：删除的分类/网站不会在刷新后被默认数据加回来
-      return normalizeConfig(parsed);
+      // 仅补齐「CL 应用」工作区测试/生产入口
+      return ensureClApps(normalizeConfig(parsed));
     } catch {
-      return clone(buildDefaults());
+      return ensureClApps(buildDefaults());
     }
   }
 
   let state = load();
   const listeners = new Set();
   let syncing = false;
+
+  // 迁移写入：补齐 CL 应用后立刻持久化，便于 CF 同步带上新链接
+  try {
+    const before = localStorage.getItem(KEY);
+    const after = JSON.stringify(state);
+    if (before !== after) {
+      localStorage.setItem(KEY, after);
+      if (window.NavCfSync?.markDirty) {
+        setTimeout(() => {
+          try {
+            NavCfSync.markDirty();
+          } catch (_) {}
+        }, 0);
+      }
+    }
+  } catch (_) {}
 
   function emit() {
     listeners.forEach((fn) => {
@@ -257,7 +367,7 @@
 
   function applyState(next, { fromSync = false } = {}) {
     syncing = fromSync;
-    state = normalizeConfig(next);
+    state = ensureClApps(normalizeConfig(next));
     persist();
     syncing = false;
   }
@@ -269,6 +379,7 @@
     defaults: buildDefaults,
     mergeConfigs,
     ensureDefaultsIn,
+    ensureClApps,
 
     get() {
       return clone(state);

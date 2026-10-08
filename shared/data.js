@@ -80,6 +80,10 @@ window.NAV_DATA = {
   ],
   "sideMenu": [
     {
+      "id": "cl_apps",
+      "name": "CL 应用"
+    },
+    {
       "id": "ai",
       "name": "AI"
     },
@@ -145,6 +149,83 @@ window.NAV_DATA = {
     }
   ],
   "categories": {
+    "cl_apps": {
+      "title": "CL 应用",
+      "links": [
+        {
+          "title": "网兜官网 - 生产",
+          "url": "https://wangdou.win/",
+          "desc": "网兜官网 · Cloudflare 生产",
+          "domain": "wangdou.win"
+        },
+        {
+          "title": "网兜官网 - 测试",
+          "url": "https://xiaochenbian-new.github.io/cl-network-disk-web/",
+          "desc": "网兜官网 · GitHub Pages 测试",
+          "domain": "xiaochenbian-new.github.io"
+        },
+        {
+          "title": "Todo工具官网 - 生产",
+          "url": "https://todo.wangdou.win/",
+          "desc": "Todo 官网 · Cloudflare 生产",
+          "domain": "todo.wangdou.win"
+        },
+        {
+          "title": "Todo工具官网 - 测试",
+          "url": "https://xiaochenbian-new.github.io/cl-todo-app-web/",
+          "desc": "Todo 官网 · GitHub Pages 测试",
+          "domain": "xiaochenbian-new.github.io"
+        },
+        {
+          "title": "核销系统 - 生产",
+          "url": "https://license.wangdou.win/",
+          "desc": "cl-license · Cloudflare 生产",
+          "domain": "license.wangdou.win"
+        },
+        {
+          "title": "核销系统 - 测试",
+          "url": "https://main.cl-license.pages.dev/",
+          "desc": "cl-license · CF Preview（main）",
+          "domain": "main.cl-license.pages.dev"
+        },
+        {
+          "title": "挪车码 - 生产",
+          "url": "https://carphone.wangdou.win/",
+          "desc": "cl-car-phone · Cloudflare 生产",
+          "domain": "carphone.wangdou.win"
+        },
+        {
+          "title": "挪车码 - 测试",
+          "url": "https://main.cl-car-phone.pages.dev/",
+          "desc": "cl-car-phone · CF Preview（main）",
+          "domain": "main.cl-car-phone.pages.dev"
+        },
+        {
+          "title": "CL Nav - 生产",
+          "url": "https://nav.wangdou.win/",
+          "desc": "开发者导航 · Cloudflare 生产",
+          "domain": "nav.wangdou.win"
+        },
+        {
+          "title": "CL Nav - 测试",
+          "url": "https://xiaochenbian-new.github.io/cl-nav/",
+          "desc": "开发者导航 · GitHub Pages 测试",
+          "domain": "xiaochenbian-new.github.io"
+        },
+        {
+          "title": "工具导航 - 生产",
+          "url": "https://ctool-nav.wangdou.win/",
+          "desc": "tool-nav · Cloudflare 生产",
+          "domain": "ctool-nav.wangdou.win"
+        },
+        {
+          "title": "工具导航 - 测试",
+          "url": "https://xiaochenbian-new.github.io/tool-nav/",
+          "desc": "tool-nav · GitHub Pages 测试",
+          "domain": "xiaochenbian-new.github.io"
+        }
+      ]
+    },
     "ai": {
       "title": "AI",
       "links": [
