@@ -105,6 +105,27 @@ function normalizeLinks(input, fallbackUrl, defaultChannel) {
   return links.slice(0, 20);
 }
 
+/** 按渠道合并：同 channel 覆盖，新 channel 追加；其它渠道保留 */
+function mergeLinksByChannel(existing, incoming) {
+  const map = new Map();
+  for (const raw of Array.isArray(existing) ? existing : []) {
+    const link = normalizeLink(raw);
+    if (!link) continue;
+    map.set(link.channel, link);
+  }
+  for (const raw of Array.isArray(incoming) ? incoming : []) {
+    const link = normalizeLink(raw);
+    if (!link) continue;
+    const prev = map.get(link.channel);
+    map.set(link.channel, {
+      url: link.url,
+      channel: link.channel,
+      label: link.label || (prev && prev.label) || "",
+    });
+  }
+  return Array.from(map.values()).slice(0, 20);
+}
+
 function primaryUrl(item) {
   if (!item) return "";
   if (item.downloadUrl && (/^https?:\/\//i.test(item.downloadUrl) || String(item.downloadUrl).startsWith("/api/"))) {
@@ -451,10 +472,13 @@ export async function onRequest(context) {
           if (body.links != null || body.downloadUrl != null) {
             const defaultChannel =
               cur.storage && cur.storage.type === "github-release" ? "github" : "direct";
-            const links = normalizeLinks(body.links, body.downloadUrl, defaultChannel);
-            if (!links.length) {
+            const incoming = normalizeLinks(body.links, body.downloadUrl, defaultChannel);
+            if (!incoming.length) {
               return json({ error: "请至少保留一个有效外链（http/https）" }, 400, request);
             }
+            const links = body.mergeLinks
+              ? mergeLinksByChannel(cur.links || [], incoming)
+              : incoming;
             next.links = links;
             next.downloadUrl = links[0].url;
           }
