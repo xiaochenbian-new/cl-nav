@@ -1,9 +1,9 @@
-name: Deploy cl-nav to GitHub Pages
+name: Deploy cl-nav to GitHub Pages (test)
 
-# 推送到 main（或手动触发）时，把静态站发布到 GitHub Pages。
+# main = 测试（GitHub Pages）；生产由 Cloudflare 跟踪 production 分支。
 on:
   push:
-    branches: [master]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
