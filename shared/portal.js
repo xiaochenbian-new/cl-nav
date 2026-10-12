@@ -7,8 +7,11 @@
       id: "cloudflare",
       short: "CF",
       name: "Cloudflare Pages",
-      base: "https://cl-nav.pages.dev",
-      match: (host) => /(?:^|\.)pages\.dev$/i.test(host),
+      // 生产用自定义域名；pages.dev 仍视为同一套 CF 部署
+      base: "https://nav.wangdou.win",
+      match: (host) =>
+        /(?:^|\.)pages\.dev$/i.test(host) ||
+        /^nav\.wangdou\.win$/i.test(host),
     },
     {
       id: "github",
