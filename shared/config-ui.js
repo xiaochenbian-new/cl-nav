@@ -118,7 +118,7 @@
 
   /** Shared drag state so category list can accept site-card drops reliably. */
   const paneDrag = {
-    kind: null, // 'link' | 'cat' | null
+    kind: null, // 'link' | 'cat' | 'child' | null
     linkEl: null,
     linkIndex: -1,
   };
@@ -127,22 +127,28 @@
    * Grid drag-reorder like phone app icons: while dragging, the item
    * takes the hovered slot and siblings shift to fill the gap; persist on end.
    * Drag from anywhere on the card except interactive controls.
-   * Optional: drop onto category buttons to move the link.
+   * Optional: drop onto category / subcategory buttons to move the link.
    */
-  function bindGridDragSort(listEl, { onReorder, catListEl, selectedCatId, onMoveToCategory }) {
+  function bindGridDragSort(listEl, { onReorder, catListEl, selectedCatId, selectedChildId, onMoveToCategory }) {
     if (!listEl) return;
     let dragEl = null;
     let startOrder = null;
     let moved = false;
     let dropCatId = null;
+    let dropChildId = null;
     let movedToCat = false;
+    const curChild = selectedChildId || "";
 
     const items = () => [...listEl.querySelectorAll(".cfg-item[data-sortable]")];
     const isInteractive = (t) =>
       !!t.closest("button, input, label, a, .cfg-link-check, .cfg-link-del, .cfg-link-edit");
 
+    const sameLeaf = (catId, childId) =>
+      catId === selectedCatId && String(childId || "") === String(curChild);
+
     const clearCatDrop = () => {
       dropCatId = null;
+      dropChildId = null;
       catListEl?.querySelectorAll(".cfg-cat").forEach((el) => el.classList.remove("drop-target"));
     };
 
@@ -181,6 +187,7 @@
         moved = false;
         movedToCat = false;
         dropCatId = null;
+        dropChildId = null;
         startOrder = items().map((el) => el.dataset.li);
         paneDrag.kind = "link";
         paneDrag.linkEl = item;
@@ -242,12 +249,15 @@
         e.preventDefault();
         e.stopPropagation();
         const id = cat.dataset.cat;
+        const childId = cat.dataset.child || "";
         catListEl.querySelectorAll(".cfg-cat").forEach((el) => el.classList.remove("drop-target"));
-        if (id && id !== selectedCatId) {
+        if (id && !sameLeaf(id, childId)) {
           cat.classList.add("drop-target");
           dropCatId = id;
+          dropChildId = childId;
         } else {
           dropCatId = null;
+          dropChildId = null;
         }
         try {
           e.dataTransfer.dropEffect = "move";
@@ -267,22 +277,50 @@
         e.preventDefault();
         e.stopPropagation();
         const id = cat?.dataset.cat || dropCatId;
+        const childId = cat?.dataset.child != null ? cat.dataset.child || "" : dropChildId || "";
         const idx = Number.isInteger(paneDrag.linkIndex) ? paneDrag.linkIndex : +dragEl.dataset.li;
         clearCatDrop();
-        if (!id || id === selectedCatId || !Number.isInteger(idx) || idx < 0) return;
+        if (!id || sameLeaf(id, childId) || !Number.isInteger(idx) || idx < 0) return;
         movedToCat = true;
         // Defer so dragend can finish before store re-render tears down the DOM
-        window.setTimeout(() => onMoveToCategory(idx, id), 0);
+        window.setTimeout(() => onMoveToCategory(idx, id, childId || null), 0);
       });
     }
   }
 
-  /** Vertical drag-reorder for category sidebar — press anywhere (same as site cards). */
-  function bindCatListDrag(listEl, { onReorder }) {
+  /** Parent row + following subcategory rows as one block. */
+  function catParentBlock(parentBtn) {
+    const nodes = [parentBtn];
+    let n = parentBtn.nextElementSibling;
+    while (n && n.classList.contains("cfg-cat-sub")) {
+      nodes.push(n);
+      n = n.nextElementSibling;
+    }
+    return nodes;
+  }
+
+  /**
+   * Vertical drag for category sidebar:
+   * - parent rows reorder among parents (move block with children)
+   * - child rows reorder within same parent, or drop onto another parent to migrate
+   */
+  function bindCatListDrag(listEl, { onReorderParent, onReorderChild, onMoveChildToParent }) {
     if (!listEl || listEl.dataset.dragBound === "1") return;
     listEl.dataset.dragBound = "1";
     let dragEl = null;
+    let dragKind = null; // 'cat' | 'child'
     let suppressClick = false;
+    let dropParentId = null;
+    let didStructuralMove = false;
+    let handledByDrop = false;
+
+    const clearMarks = () => {
+      dropParentId = null;
+      listEl.querySelectorAll(".cfg-cat").forEach((el) => {
+        el.classList.remove("dragging", "drag-over", "drop-target");
+        el.setAttribute("draggable", "false");
+      });
+    };
 
     listEl.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
@@ -318,30 +356,73 @@
         return;
       }
       dragEl = cat;
+      dragKind = cat.dataset.sortable === "child" ? "child" : "cat";
       suppressClick = false;
-      paneDrag.kind = "cat";
+      didStructuralMove = false;
+      handledByDrop = false;
+      dropParentId = null;
+      paneDrag.kind = dragKind;
       cat.classList.add("dragging");
       try {
         e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", "cat:" + (cat.dataset.cat || ""));
+        e.dataTransfer.setData(
+          "text/plain",
+          dragKind === "child"
+            ? "child:" + (cat.dataset.cat || "") + ":" + (cat.dataset.child || "")
+            : "cat:" + (cat.dataset.cat || "")
+        );
       } catch (_) {}
     });
 
     listEl.addEventListener("dragover", (e) => {
       if (paneDrag.kind === "link") return;
-      if (!dragEl) return;
+      if (!dragEl || !dragKind) return;
       e.preventDefault();
-      const cat = e.target.closest(".cfg-cat[data-sortable]");
-      if (!cat || cat === dragEl || !listEl.contains(cat)) return;
-      const all = [...listEl.querySelectorAll(".cfg-cat[data-sortable]")];
-      const from = all.indexOf(dragEl);
-      const to = all.indexOf(cat);
-      if (from < 0 || to < 0 || from === to) return;
-      if (from < to) cat.after(dragEl);
-      else cat.before(dragEl);
-      suppressClick = true;
-      listEl.querySelectorAll(".cfg-cat").forEach((el) => el.classList.remove("drag-over"));
-      cat.classList.add("drag-over");
+
+      if (dragKind === "cat") {
+        const overParent = e.target.closest(".cfg-cat[data-sortable='cat']");
+        if (!overParent || overParent === dragEl || !listEl.contains(overParent)) return;
+        const parents = [...listEl.querySelectorAll(".cfg-cat[data-sortable='cat']")];
+        const from = parents.indexOf(dragEl);
+        const to = parents.indexOf(overParent);
+        if (from < 0 || to < 0 || from === to) return;
+        const block = catParentBlock(dragEl);
+        if (from < to) {
+          const overBlock = catParentBlock(overParent);
+          const last = overBlock[overBlock.length - 1];
+          last.after(...block);
+        } else {
+          overParent.before(...block);
+        }
+        suppressClick = true;
+        didStructuralMove = true;
+        listEl.querySelectorAll(".cfg-cat").forEach((el) => el.classList.remove("drag-over", "drop-target"));
+        overParent.classList.add("drag-over");
+      } else {
+        // child: reorder among siblings, or highlight another parent as migrate target
+        const overChild = e.target.closest(".cfg-cat[data-sortable='child']");
+        const overParent = e.target.closest(".cfg-cat[data-sortable='cat']");
+        listEl.querySelectorAll(".cfg-cat").forEach((el) => el.classList.remove("drag-over", "drop-target"));
+
+        if (overChild && overChild !== dragEl && overChild.dataset.cat === dragEl.dataset.cat) {
+          dropParentId = null;
+          const siblings = [
+            ...listEl.querySelectorAll(`.cfg-cat[data-sortable='child'][data-cat="${dragEl.dataset.cat}"]`),
+          ];
+          const from = siblings.indexOf(dragEl);
+          const to = siblings.indexOf(overChild);
+          if (from < 0 || to < 0 || from === to) return;
+          if (from < to) overChild.after(dragEl);
+          else overChild.before(dragEl);
+          suppressClick = true;
+          didStructuralMove = true;
+          overChild.classList.add("drag-over");
+        } else if (overParent && overParent.dataset.cat !== dragEl.dataset.cat) {
+          overParent.classList.add("drop-target");
+          dropParentId = overParent.dataset.cat;
+          suppressClick = true;
+        }
+      }
       try {
         e.dataTransfer.dropEffect = "move";
       } catch (_) {}
@@ -350,30 +431,74 @@
     listEl.addEventListener("drop", (e) => {
       if (paneDrag.kind === "link") return;
       e.preventDefault();
+      if (dragKind !== "child" || !dragEl) return;
+      const overParent = e.target.closest(".cfg-cat[data-sortable='cat']");
+      const toParent = overParent?.dataset.cat || dropParentId;
+      if (!toParent || toParent === dragEl.dataset.cat) return;
+      const fromCatId = dragEl.dataset.cat;
+      const childId = dragEl.dataset.child;
+      handledByDrop = true;
+      didStructuralMove = true;
+      clearMarks();
+      dragEl = null;
+      dragKind = null;
+      paneDrag.kind = null;
+      window.setTimeout(() => {
+        onMoveChildToParent?.(fromCatId, childId, toParent);
+      }, 0);
     });
 
     listEl.addEventListener("dragend", () => {
-      listEl.querySelectorAll(".cfg-cat").forEach((el) => {
-        el.classList.remove("dragging", "drag-over", "drop-target");
-        el.setAttribute("draggable", "false");
-      });
-      if (paneDrag.kind === "cat") paneDrag.kind = null;
-      if (!dragEl) return;
-      const startId = dragEl.dataset.cat;
-      const didMove = suppressClick;
+      if (handledByDrop) {
+        handledByDrop = false;
+        clearMarks();
+        dragEl = null;
+        dragKind = null;
+        if (paneDrag.kind === "cat" || paneDrag.kind === "child") paneDrag.kind = null;
+        return;
+      }
+      const kind = dragKind;
+      const el = dragEl;
+      const didMove = didStructuralMove || suppressClick;
+      const migrateTo = dropParentId;
+      clearMarks();
+      if (paneDrag.kind === "cat" || paneDrag.kind === "child") paneDrag.kind = null;
       dragEl = null;
+      dragKind = null;
       window.setTimeout(() => {
         suppressClick = false;
       }, 0);
-      if (!didMove) return;
+      if (!el || !didMove) return;
       const cfg = window.NavStore?.get?.();
       if (!cfg) return;
-      const endIds = [...listEl.querySelectorAll(".cfg-cat[data-sortable]")].map((el) => el.dataset.cat);
-      const origIds = cfg.categories.map((c) => c.id);
-      const fromIdx = origIds.indexOf(startId);
-      const toIdx = endIds.indexOf(startId);
-      if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
-      onReorder(fromIdx, toIdx);
+
+      if (kind === "cat") {
+        const endIds = [...listEl.querySelectorAll(".cfg-cat[data-sortable='cat']")].map((n) => n.dataset.cat);
+        const origIds = cfg.categories.map((c) => c.id);
+        const fromIdx = origIds.indexOf(el.dataset.cat);
+        const toIdx = endIds.indexOf(el.dataset.cat);
+        if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
+        onReorderParent?.(fromIdx, toIdx);
+        return;
+      }
+
+      if (kind === "child") {
+        if (migrateTo && migrateTo !== el.dataset.cat) {
+          onMoveChildToParent?.(el.dataset.cat, el.dataset.child, migrateTo);
+          return;
+        }
+        const parentId = el.dataset.cat;
+        const parent = cfg.categories.find((c) => c.id === parentId);
+        if (!parent) return;
+        const endIds = [
+          ...listEl.querySelectorAll(`.cfg-cat[data-sortable='child'][data-cat="${parentId}"]`),
+        ].map((n) => n.dataset.child);
+        const origIds = (parent.children || []).map((c) => c.id);
+        const fromIdx = origIds.indexOf(el.dataset.child);
+        const toIdx = endIds.indexOf(el.dataset.child);
+        if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
+        onReorderChild?.(parentId, fromIdx, toIdx);
+      }
     });
 
     listEl.addEventListener(
@@ -750,6 +875,7 @@
 
   window.NavConfigUI = {
     selectedCatId: "",
+    selectedChildId: "", // "" = parent leaf (未分组); otherwise subcategory id
     activeTab: "quick",
     libEditingId: "",
     libFilterCategory: "all",
@@ -828,8 +954,26 @@
       const cfg = NavStore.get();
       if (!this.selectedCatId || !cfg.categories.some((c) => c.id === this.selectedCatId)) {
         this.selectedCatId = cfg.categories[0]?.id || "";
+        this.selectedChildId = "";
       }
       const selected = cfg.categories.find((c) => c.id === this.selectedCatId);
+      if (
+        this.selectedChildId &&
+        !(selected?.children || []).some((ch) => ch.id === this.selectedChildId)
+      ) {
+        this.selectedChildId = "";
+      }
+      const selectedChild = this.selectedChildId
+        ? (selected?.children || []).find((ch) => ch.id === this.selectedChildId)
+        : null;
+      const leafLinks = selectedChild ? selectedChild.links || [] : selected?.links || [];
+      const leafTitle = selectedChild
+        ? `${selected.name} / ${selectedChild.name}`
+        : selected
+          ? selected.children?.length
+            ? `${selected.name} · 未分组`
+            : selected.name
+          : "网站列表";
       const tab = this.activeTab || "theme";
       const wd = window.NavWebDav?.loadPrefs?.() || {
         baseUrl: "",
@@ -889,38 +1033,63 @@
                 <strong>分类</strong>
                 <button type="button" class="cfg-btn primary" id="cfgAddCat">＋ 新建</button>
               </div>
-              <p class="settings-tip" style="margin:0 0 0.45rem">按住分类项可拖动排序；也可把右侧网站拖到分类上迁移</p>
+              <p class="settings-tip" style="margin:0 0 0.45rem">按住可拖动排序；子分类可拖到其它一级下；右侧网站可拖到一级/二级迁移</p>
               <div class="cfg-list" id="cfgCatList">
                 ${cfg.categories
-                  .map(
-                    (c, i) => `
-                  <button type="button" class="cfg-cat ${c.id === this.selectedCatId ? "active" : ""}" data-sortable data-cat="${c.id}" data-ci="${i}">
+                  .map((c, i) => {
+                    const parentActive = c.id === this.selectedCatId && !this.selectedChildId;
+                    const count =
+                      typeof NavStore.catLinkCount === "function"
+                        ? NavStore.catLinkCount(c)
+                        : (c.links || []).length;
+                    const parentBtn = `
+                  <button type="button" class="cfg-cat ${parentActive ? "active" : ""}" data-sortable="cat" data-level="1" data-cat="${c.id}" data-ci="${i}">
                     <span class="cfg-cat-label">${esc(c.name)}</span>
-                    <em>${c.links.length}</em>
-                  </button>`
-                  )
+                    <em>${count}</em>
+                  </button>`;
+                    const childBtns = (c.children || [])
+                      .map((ch, j) => {
+                        const childActive =
+                          c.id === this.selectedCatId && this.selectedChildId === ch.id;
+                        return `
+                  <button type="button" class="cfg-cat cfg-cat-sub ${childActive ? "active" : ""}" data-sortable="child" data-level="2" data-cat="${c.id}" data-child="${ch.id}" data-cji="${j}">
+                    <span class="cfg-cat-label">${esc(ch.name)}</span>
+                    <em>${(ch.links || []).length}</em>
+                  </button>`;
+                      })
+                      .join("");
+                    return parentBtn + childBtns;
+                  })
                   .join("")}
               </div>
             </div>
             <div class="cfg-col">
               <div class="cfg-toolbar">
-                <strong>${selected ? esc(selected.name) : "网站列表"}</strong>
+                <strong>${selected ? esc(leafTitle) : "网站列表"}</strong>
                 <div class="cfg-item-actions">
                   ${
                     selected
-                      ? `
+                      ? selectedChild
+                        ? `
+                    <button type="button" id="cfgRenameCat">重命名</button>
+                    <button type="button" id="cfgUpCat">上移</button>
+                    <button type="button" id="cfgDownCat">下移</button>
+                    <button type="button" id="cfgDelCat">删除子分类</button>
+                    <button type="button" class="cfg-btn primary" id="cfgAddLink">＋ 网站</button>`
+                        : `
                     <button type="button" id="cfgRenameCat">重命名</button>
                     <button type="button" id="cfgUpCat">上移</button>
                     <button type="button" id="cfgDownCat">下移</button>
                     <button type="button" id="cfgDelCat">删除分类</button>
+                    <button type="button" id="cfgAddChild">＋ 子分类</button>
                     <button type="button" class="cfg-btn primary" id="cfgAddLink">＋ 网站</button>`
                       : ""
                   }
                 </div>
               </div>
-              <p class="settings-tip" style="margin:0 0 0.45rem">拖动卡片可排序（自动补位）；拖到左侧分类可迁移；勾选后可批量删除</p>
+              <p class="settings-tip" style="margin:0 0 0.45rem">拖动卡片可排序；拖到左侧一级/二级可迁移；勾选后可批量删除</p>
               ${
-                selected && selected.links.length
+                selected && leafLinks.length
                   ? `<div class="cfg-batch-bar">
                       <label class="chk"><input type="checkbox" id="cfgLinkCheckAll" /> 全选</label>
                       <button type="button" class="cfg-btn danger" id="cfgBatchDelLinks" disabled>批量删除</button>
@@ -931,8 +1100,8 @@
               <div class="cfg-list cfg-link-grid" id="cfgLinkList">
                 ${
                   selected
-                    ? selected.links.length
-                      ? selected.links
+                    ? leafLinks.length
+                      ? leafLinks
                           .map((l, i) => {
                             const domain = l.domain || domainFromUrl(l.url);
                             const desc = l.desc || domain || l.url || "";
@@ -953,7 +1122,13 @@
                     </div>`;
                           })
                           .join("")
-                      : `<p class="settings-tip cfg-link-grid-empty">该分类还没有网站，点击「＋ 网站」添加。</p>`
+                      : `<p class="settings-tip cfg-link-grid-empty">${
+                          selectedChild
+                            ? "该子分类还没有网站，点击「＋ 网站」添加。"
+                            : selected.children?.length
+                              ? "未分组下暂无网站；可添加，或拖到左侧子分类。"
+                              : "该分类还没有网站，点击「＋ 网站」添加。"
+                        }</p>`
                     : `<p class="settings-tip cfg-link-grid-empty">请先选择或新建分类。</p>`
                 }
               </div>
@@ -1890,28 +2065,66 @@
         this.activeTab = "cats";
         const cat = NavStore.addCategory(name.trim());
         this.selectedCatId = cat.id;
+        this.selectedChildId = "";
         flushAutoBackup();
       });
 
       root.querySelectorAll("#cfgCatList [data-cat]").forEach((btn) => {
         btn.addEventListener("click", () => {
           this.selectedCatId = btn.dataset.cat;
+          this.selectedChildId = btn.dataset.child || "";
           this.activeTab = "cats";
           this.render();
         });
       });
 
       bindCatListDrag(root.querySelector("#cfgCatList"), {
-        onReorder: (from, to) => {
+        onReorderParent: (from, to) => {
           this.activeTab = "cats";
           NavStore.reorderCategories(from, to);
           flushAutoBackup();
         },
+        onReorderChild: (catId, from, to) => {
+          this.activeTab = "cats";
+          NavStore.reorderChildren(catId, from, to);
+          flushAutoBackup();
+        },
+        onMoveChildToParent: (fromCatId, childId, toCatId) => {
+          this.activeTab = "cats";
+          const ok = NavStore.moveChildToParent(fromCatId, childId, toCatId);
+          if (ok) {
+            this.selectedCatId = toCatId;
+            this.selectedChildId = childId;
+            flushAutoBackup();
+          }
+        },
+      });
+
+      root.querySelector("#cfgAddChild")?.addEventListener("click", () => {
+        if (!this.selectedCatId || this.selectedChildId) return;
+        const name = window.prompt("子分类名称", "新子分类");
+        if (name == null || !name.trim()) return;
+        this.activeTab = "cats";
+        const child = NavStore.addChildCategory(this.selectedCatId, name.trim());
+        if (child) {
+          this.selectedChildId = child.id;
+          flushAutoBackup();
+        }
       });
 
       root.querySelector("#cfgRenameCat")?.addEventListener("click", () => {
         const cat = NavStore.get().categories.find((c) => c.id === this.selectedCatId);
         if (!cat) return;
+        if (this.selectedChildId) {
+          const child = (cat.children || []).find((ch) => ch.id === this.selectedChildId);
+          if (!child) return;
+          const name = window.prompt("子分类名称", child.name);
+          if (name == null || !name.trim()) return;
+          this.activeTab = "cats";
+          NavStore.updateChildCategory(cat.id, child.id, { name: name.trim() });
+          flushAutoBackup();
+          return;
+        }
         const name = window.prompt("分类名称", cat.name);
         if (name == null || !name.trim()) return;
         this.activeTab = "cats";
@@ -1921,44 +2134,67 @@
 
       root.querySelector("#cfgUpCat")?.addEventListener("click", () => {
         this.activeTab = "cats";
-        NavStore.moveCategory(this.selectedCatId, -1);
+        if (this.selectedChildId) {
+          NavStore.moveChildCategory(this.selectedCatId, this.selectedChildId, -1);
+        } else {
+          NavStore.moveCategory(this.selectedCatId, -1);
+        }
         flushAutoBackup();
       });
 
       root.querySelector("#cfgDownCat")?.addEventListener("click", () => {
         this.activeTab = "cats";
-        NavStore.moveCategory(this.selectedCatId, 1);
+        if (this.selectedChildId) {
+          NavStore.moveChildCategory(this.selectedCatId, this.selectedChildId, 1);
+        } else {
+          NavStore.moveCategory(this.selectedCatId, 1);
+        }
         flushAutoBackup();
       });
 
       root.querySelector("#cfgDelCat")?.addEventListener("click", () => {
         const cat = NavStore.get().categories.find((c) => c.id === this.selectedCatId);
         if (!cat) return;
-        if (!confirm(`确定删除分类「${cat.name}」及其全部网站？`)) return;
+        if (this.selectedChildId) {
+          const child = (cat.children || []).find((ch) => ch.id === this.selectedChildId);
+          if (!child) return;
+          if (!confirm(`确定删除子分类「${child.name}」及其全部网站？`)) return;
+          this.activeTab = "cats";
+          NavStore.removeChildCategory(cat.id, child.id);
+          this.selectedChildId = "";
+          flushAutoBackup();
+          return;
+        }
+        if (!confirm(`确定删除分类「${cat.name}」及其子分类与全部网站？`)) return;
         this.activeTab = "cats";
         NavStore.removeCategory(cat.id);
         this.selectedCatId = "";
+        this.selectedChildId = "";
         flushAutoBackup();
       });
+
+      const leafChildId = () => this.selectedChildId || null;
 
       root.querySelector("#cfgAddLink")?.addEventListener("click", async () => {
         if (!this.selectedCatId) return;
         const link = await openLinkDialog({}, "添加网站");
         if (!link) return;
         this.activeTab = "cats";
-        NavStore.addLink(this.selectedCatId, link);
+        NavStore.addLink(this.selectedCatId, link, leafChildId());
         flushAutoBackup();
       });
 
       root.querySelectorAll("[data-l-edit]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const i = +btn.dataset.lEdit;
-          const cat = NavStore.get().categories.find((c) => c.id === this.selectedCatId);
-          if (!cat) return;
-          const link = await openLinkDialog(cat.links[i], "编辑网站");
+          const leaf = NavStore.resolveLeaf
+            ? NavStore.resolveLeaf(NavStore.get().categories, this.selectedCatId, leafChildId())
+            : NavStore.get().categories.find((c) => c.id === this.selectedCatId);
+          if (!leaf) return;
+          const link = await openLinkDialog(leaf.links[i], "编辑网站");
           if (!link) return;
           this.activeTab = "cats";
-          NavStore.updateLink(this.selectedCatId, i, link);
+          NavStore.updateLink(this.selectedCatId, i, link, leafChildId());
           flushAutoBackup();
         });
       });
@@ -1967,7 +2203,7 @@
         btn.addEventListener("click", () => {
           if (!confirm("确定删除该网站？")) return;
           this.activeTab = "cats";
-          NavStore.removeLink(this.selectedCatId, +btn.dataset.lDel);
+          NavStore.removeLink(this.selectedCatId, +btn.dataset.lDel, leafChildId());
           flushAutoBackup();
         });
       });
@@ -2004,21 +2240,27 @@
         if (!indices.length) return;
         if (!confirm(`确定删除选中的 ${indices.length} 个网站？`)) return;
         this.activeTab = "cats";
-        NavStore.removeLinks(this.selectedCatId, indices);
+        NavStore.removeLinks(this.selectedCatId, indices, leafChildId());
         flushAutoBackup();
       });
 
       bindGridDragSort(root.querySelector("#cfgLinkList"), {
         onReorder: (orderedIndices) => {
           this.activeTab = "cats";
-          NavStore.reorderLinksByOrder(this.selectedCatId, orderedIndices);
+          NavStore.reorderLinksByOrder(this.selectedCatId, orderedIndices, leafChildId());
           flushAutoBackup();
         },
         catListEl: root.querySelector("#cfgCatList"),
         selectedCatId: this.selectedCatId,
-        onMoveToCategory: (linkIndex, toCatId) => {
+        selectedChildId: this.selectedChildId,
+        onMoveToCategory: (linkIndex, toCatId, toChildId) => {
           this.activeTab = "cats";
-          const ok = NavStore.moveLinkToCategory(this.selectedCatId, linkIndex, toCatId);
+          const ok = NavStore.moveLinkToCategory(
+            this.selectedCatId,
+            linkIndex,
+            toCatId,
+            { fromChildId: leafChildId(), toChildId: toChildId || null }
+          );
           if (ok) flushAutoBackup();
         },
       });
@@ -2058,6 +2300,7 @@
         this.activeTab = "data";
         NavStore.reset();
         this.selectedCatId = "";
+        this.selectedChildId = "";
       });
 
       const setCfStatus = (text, kind = "") => {

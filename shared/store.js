@@ -22,11 +22,46 @@
     return { title, url, desc, domain };
   }
 
+  function normalizeChild(ch) {
+    return {
+      id: ch.id || uid("sub"),
+      name: String(ch.name || "").trim() || "未命名子分类",
+      links: (ch.links || []).map(normalizeLink),
+    };
+  }
+
+  function normalizeCategory(c) {
+    const children = Array.isArray(c.children) ? c.children.map(normalizeChild) : [];
+    return {
+      id: c.id || uid("cat"),
+      name: String(c.name || "").trim() || "未命名分类",
+      links: (c.links || []).map(normalizeLink),
+      children,
+    };
+  }
+
+  function catLinkCount(c) {
+    const own = (c.links || []).length;
+    const kids = (c.children || []).reduce((n, ch) => n + (ch.links || []).length, 0);
+    return own + kids;
+  }
+
   function linkKey(link) {
     return String(link.url || "")
       .trim()
       .toLowerCase()
       .replace(/\/+$/, "");
+  }
+
+  /** Resolve leaf container: parent links (childId null) or a child. */
+  function resolveLeaf(categories, catId, childId) {
+    const cat = (categories || []).find((c) => c.id === catId);
+    if (!cat) return null;
+    if (childId) {
+      const child = (cat.children || []).find((ch) => ch.id === childId);
+      return child || null;
+    }
+    return cat;
   }
 
   function buildDefaults() {
@@ -38,20 +73,24 @@
       .map((id) => {
         const c = catMap[id];
         const short = (raw.sideMenu || []).find((s) => s.id === id)?.name;
-        return {
+        return normalizeCategory({
           id,
           name: short || c.title || id,
-          links: (c.links || []).map(normalizeLink),
-        };
+          links: c.links || [],
+          children: c.children || [],
+        });
       });
 
     Object.keys(catMap).forEach((id) => {
       if (categories.some((c) => c.id === id)) return;
-      categories.push({
-        id,
-        name: catMap[id].title || id,
-        links: (catMap[id].links || []).map(normalizeLink),
-      });
+      categories.push(
+        normalizeCategory({
+          id,
+          name: catMap[id].title || id,
+          links: catMap[id].links || [],
+          children: catMap[id].children || [],
+        })
+      );
     });
 
     const quickLinks = (raw.hotTags || []).map((t) =>
@@ -106,14 +145,9 @@
     return Array.from(map.values());
   }
 
-  /** Union categories by id, then by name; links union by URL. */
-  function mergeCategories(listA, listB) {
-    const result = (listA || []).map((c) => ({
-      id: c.id || uid("cat"),
-      name: c.name || "未命名分类",
-      links: (c.links || []).map(normalizeLink),
-    }));
-
+  /** Union children by id, then by name; links union by URL. */
+  function mergeChildren(listA, listB) {
+    const result = (listA || []).map(normalizeChild);
     (listB || []).forEach((ec) => {
       const id = ec.id || "";
       const name = (ec.name || "").trim();
@@ -125,11 +159,29 @@
         target.links = mergeLinks(target.links, ec.links || []);
         if (name && name.length > String(target.name || "").length) target.name = name;
       } else {
-        result.push({
-          id: id || uid("cat"),
-          name: name || "未命名分类",
-          links: (ec.links || []).map(normalizeLink),
-        });
+        result.push(normalizeChild(ec));
+      }
+    });
+    return result;
+  }
+
+  /** Union categories by id, then by name; links + children union. */
+  function mergeCategories(listA, listB) {
+    const result = (listA || []).map(normalizeCategory);
+
+    (listB || []).forEach((ec) => {
+      const id = ec.id || "";
+      const name = (ec.name || "").trim();
+      let target =
+        (id && result.find((c) => c.id === id)) ||
+        (name && result.find((c) => c.name === name)) ||
+        null;
+      if (target) {
+        target.links = mergeLinks(target.links, ec.links || []);
+        target.children = mergeChildren(target.children, ec.children || []);
+        if (name && name.length > String(target.name || "").length) target.name = name;
+      } else {
+        result.push(normalizeCategory(ec));
       }
     });
     return result;
@@ -205,11 +257,12 @@
       config.categories.find((c) => c.id === "cl_apps") ||
       config.categories.find((c) => String(c.name || "").trim() === "CL 应用");
     if (!cat) {
-      cat = { id: "cl_apps", name: "CL 应用", links: [] };
+      cat = { id: "cl_apps", name: "CL 应用", links: [], children: [] };
       config.categories.unshift(cat);
     } else {
       cat.id = "cl_apps";
       cat.name = "CL 应用";
+      if (!Array.isArray(cat.children)) cat.children = [];
       config.categories = [
         cat,
         ...config.categories.filter((c) => c !== cat),
@@ -260,11 +313,7 @@
       tagline: parsed.tagline || "",
       engines: parsed.engines || buildDefaults().engines,
       quickLinks: (parsed.quickLinks || []).map(normalizeLink),
-      categories: (parsed.categories || []).map((c) => ({
-        id: c.id || uid("cat"),
-        name: c.name || "未命名分类",
-        links: (c.links || []).map(normalizeLink),
-      })),
+      categories: (parsed.categories || []).map(normalizeCategory),
     };
   }
 
@@ -284,6 +333,15 @@
           links: c.links
             .map((l) => ({ title: l.title, url: linkKey(l), desc: l.desc }))
             .sort((a, b) => a.url.localeCompare(b.url)),
+          children: (c.children || [])
+            .map((ch) => ({
+              id: ch.id,
+              name: ch.name,
+              links: ch.links
+                .map((l) => ({ title: l.title, url: linkKey(l), desc: l.desc }))
+                .sort((a, b) => a.url.localeCompare(b.url)),
+            }))
+            .sort((a, b) => String(a.id).localeCompare(String(b.id))),
         }))
         .sort((a, b) => String(a.id).localeCompare(String(b.id))),
     };
@@ -486,10 +544,11 @@
       persist();
     },
 
-    reorderLinks(catId, from, to) {
-      const cat = state.categories.find((c) => c.id === catId);
-      if (!cat) return;
-      const arr = cat.links;
+    /** @param {string|null} [childId] parent links when null/omitted */
+    reorderLinks(catId, from, to, childId) {
+      const leaf = resolveLeaf(state.categories, catId, childId || null);
+      if (!leaf) return;
+      const arr = leaf.links;
       if (from === to || from < 0 || to < 0 || from >= arr.length || to >= arr.length) return;
       const [item] = arr.splice(from, 1);
       arr.splice(to, 0, item);
@@ -497,10 +556,10 @@
     },
 
     /** Reorder links by original indices in their new order (grid drag). */
-    reorderLinksByOrder(catId, orderedIndices) {
-      const cat = state.categories.find((c) => c.id === catId);
-      if (!cat) return;
-      const arr = cat.links;
+    reorderLinksByOrder(catId, orderedIndices, childId) {
+      const leaf = resolveLeaf(state.categories, catId, childId || null);
+      if (!leaf) return;
+      const arr = leaf.links;
       const idxs = (orderedIndices || []).map((i) => +i);
       if (idxs.length !== arr.length) return;
       const seen = new Set();
@@ -508,12 +567,22 @@
         if (!Number.isInteger(i) || i < 0 || i >= arr.length || seen.has(i)) return;
         seen.add(i);
       }
-      cat.links = idxs.map((i) => arr[i]);
+      leaf.links = idxs.map((i) => arr[i]);
       persist();
     },
 
     reorderCategories(from, to) {
       const arr = state.categories;
+      if (from === to || from < 0 || to < 0 || from >= arr.length || to >= arr.length) return;
+      const [item] = arr.splice(from, 1);
+      arr.splice(to, 0, item);
+      persist();
+    },
+
+    reorderChildren(catId, from, to) {
+      const cat = state.categories.find((c) => c.id === catId);
+      if (!cat) return;
+      const arr = cat.children || (cat.children = []);
       if (from === to || from < 0 || to < 0 || from >= arr.length || to >= arr.length) return;
       const [item] = arr.splice(from, 1);
       arr.splice(to, 0, item);
@@ -537,10 +606,24 @@
     },
 
     addCategory(name) {
-      const cat = { id: uid("cat"), name: (name || "新分类").trim() || "新分类", links: [] };
+      const cat = { id: uid("cat"), name: (name || "新分类").trim() || "新分类", links: [], children: [] };
       state.categories.push(cat);
       persist();
       return clone(cat);
+    },
+
+    addChildCategory(catId, name) {
+      const cat = state.categories.find((c) => c.id === catId);
+      if (!cat) return null;
+      if (!Array.isArray(cat.children)) cat.children = [];
+      const child = {
+        id: uid("sub"),
+        name: (name || "新子分类").trim() || "新子分类",
+        links: [],
+      };
+      cat.children.push(child);
+      persist();
+      return clone(child);
     },
 
     updateCategory(id, patch) {
@@ -550,8 +633,24 @@
       persist();
     },
 
+    updateChildCategory(catId, childId, patch) {
+      const cat = state.categories.find((c) => c.id === catId);
+      if (!cat) return;
+      const child = (cat.children || []).find((ch) => ch.id === childId);
+      if (!child) return;
+      if (patch.name != null) child.name = String(patch.name).trim() || child.name;
+      persist();
+    },
+
     removeCategory(id) {
       state.categories = state.categories.filter((c) => c.id !== id);
+      persist();
+    },
+
+    removeChildCategory(catId, childId) {
+      const cat = state.categories.find((c) => c.id === catId);
+      if (!cat || !Array.isArray(cat.children)) return;
+      cat.children = cat.children.filter((ch) => ch.id !== childId);
       persist();
     },
 
@@ -566,57 +665,101 @@
       persist();
     },
 
-    addLink(catId, link) {
+    moveChildCategory(catId, childId, dir) {
       const cat = state.categories.find((c) => c.id === catId);
-      if (!cat) return;
-      cat.links.push(normalizeLink(link));
+      if (!cat || !Array.isArray(cat.children)) return;
+      const i = cat.children.findIndex((ch) => ch.id === childId);
+      if (i < 0) return;
+      const j = i + dir;
+      if (j < 0 || j >= cat.children.length) return;
+      const tmp = cat.children[i];
+      cat.children[i] = cat.children[j];
+      cat.children[j] = tmp;
       persist();
     },
 
-    updateLink(catId, index, link) {
-      const cat = state.categories.find((c) => c.id === catId);
-      if (!cat || index < 0 || index >= cat.links.length) return;
-      cat.links[index] = normalizeLink(link);
+    /** Move a child subcategory under another parent (append). */
+    moveChildToParent(fromCatId, childId, toCatId) {
+      if (!fromCatId || !toCatId || !childId) return false;
+      const from = state.categories.find((c) => c.id === fromCatId);
+      const to = state.categories.find((c) => c.id === toCatId);
+      if (!from || !to) return false;
+      if (!Array.isArray(from.children)) from.children = [];
+      if (!Array.isArray(to.children)) to.children = [];
+      const i = from.children.findIndex((ch) => ch.id === childId);
+      if (i < 0) return false;
+      if (fromCatId === toCatId) return false;
+      const [child] = from.children.splice(i, 1);
+      to.children.push(child);
+      persist();
+      return true;
+    },
+
+    addLink(catId, link, childId) {
+      const leaf = resolveLeaf(state.categories, catId, childId || null);
+      if (!leaf) return;
+      leaf.links.push(normalizeLink(link));
       persist();
     },
 
-    removeLink(catId, index) {
-      const cat = state.categories.find((c) => c.id === catId);
-      if (!cat) return;
-      cat.links.splice(index, 1);
+    updateLink(catId, index, link, childId) {
+      const leaf = resolveLeaf(state.categories, catId, childId || null);
+      if (!leaf || index < 0 || index >= leaf.links.length) return;
+      leaf.links[index] = normalizeLink(link);
+      persist();
+    },
+
+    removeLink(catId, index, childId) {
+      const leaf = resolveLeaf(state.categories, catId, childId || null);
+      if (!leaf) return;
+      leaf.links.splice(index, 1);
       persist();
     },
 
     /** Remove multiple links by index (any order). */
-    removeLinks(catId, indices) {
-      const cat = state.categories.find((c) => c.id === catId);
-      if (!cat) return;
+    removeLinks(catId, indices, childId) {
+      const leaf = resolveLeaf(state.categories, catId, childId || null);
+      if (!leaf) return;
       const set = new Set(
         (indices || [])
           .map((i) => +i)
-          .filter((i) => Number.isInteger(i) && i >= 0 && i < cat.links.length)
+          .filter((i) => Number.isInteger(i) && i >= 0 && i < leaf.links.length)
       );
       if (!set.size) return;
-      cat.links = cat.links.filter((_, i) => !set.has(i));
+      leaf.links = leaf.links.filter((_, i) => !set.has(i));
       persist();
     },
 
-    moveLink(catId, index, dir) {
-      const cat = state.categories.find((c) => c.id === catId);
-      if (!cat) return;
+    moveLink(catId, index, dir, childId) {
+      const leaf = resolveLeaf(state.categories, catId, childId || null);
+      if (!leaf) return;
       const j = index + dir;
-      if (index < 0 || j < 0 || index >= cat.links.length || j >= cat.links.length) return;
-      const tmp = cat.links[index];
-      cat.links[index] = cat.links[j];
-      cat.links[j] = tmp;
+      if (index < 0 || j < 0 || index >= leaf.links.length || j >= leaf.links.length) return;
+      const tmp = leaf.links[index];
+      leaf.links[index] = leaf.links[j];
+      leaf.links[j] = tmp;
       persist();
     },
 
-    /** Move a link from one category to another (append to target). */
-    moveLinkToCategory(fromCatId, linkIndex, toCatId) {
-      if (!fromCatId || !toCatId || fromCatId === toCatId) return false;
-      const from = state.categories.find((c) => c.id === fromCatId);
-      const to = state.categories.find((c) => c.id === toCatId);
+    /**
+     * Move a link between leaves.
+     * toChildId null → parent-level links of toCatId.
+     * fromChildId/toChildId optional for backward compat (parent↔parent).
+     */
+    moveLinkToCategory(fromCatId, linkIndex, toCatId, fromChildId, toChildId) {
+      // Legacy 3-arg / 4th string as toCat only — support opts object as 4th arg
+      let fromChild = fromChildId || null;
+      let toChild = toChildId || null;
+      if (fromChildId && typeof fromChildId === "object") {
+        fromChild = fromChildId.fromChildId || null;
+        toChild = fromChildId.toChildId || null;
+      }
+      if (!fromCatId || !toCatId) return false;
+      const sameLeaf =
+        fromCatId === toCatId && String(fromChild || "") === String(toChild || "");
+      if (sameLeaf) return false;
+      const from = resolveLeaf(state.categories, fromCatId, fromChild);
+      const to = resolveLeaf(state.categories, toCatId, toChild);
       if (!from || !to) return false;
       const i = +linkIndex;
       if (!Number.isInteger(i) || i < 0 || i >= from.links.length) return false;
@@ -625,6 +768,9 @@
       persist();
       return true;
     },
+
+    catLinkCount,
+    resolveLeaf,
 
     moveQuickLink(index, dir) {
       const j = index + dir;

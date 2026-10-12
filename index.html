@@ -704,6 +704,33 @@
       box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent), var(--shadow);
     }
 
+    .cat-sub {
+      margin-top: 0.85rem;
+    }
+
+    .cat-sub:first-child {
+      margin-top: 0;
+    }
+
+    .cat-subhead {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      margin: 0 0 0.55rem;
+      font-size: 0.82rem;
+      font-weight: 650;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+    }
+
+    .cat-subhead::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: var(--line);
+      opacity: 0.9;
+    }
+
     @media (max-width: 900px) {
       .page {
         width: min(1180px, calc(100% - 1.5rem));
@@ -734,7 +761,7 @@
       .search-row { max-width: none; grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="stylesheet" href="shared/settings.css?v=20260930c" />
+  <link rel="stylesheet" href="shared/settings.css?v=20261012b" />
 </head>
 <body>
   <div class="page">
@@ -788,14 +815,14 @@
   <script src="shared/data.js?v=20261008a"></script>
   <script src="shared/api-base.js?v=20260328s"></script>
   <script src="shared/favicon-cache.js"></script>
-  <script src="shared/store.js?v=20261008a"></script>
+  <script src="shared/store.js?v=20261012b"></script>
   <script src="shared/auth.js"></script>
   <script src="shared/login-ui.js"></script>
   <script src="shared/cf-sync.js?v=20260930a"></script>
   <script src="shared/webdav.js?v=20260930a"></script>
   <script src="shared/library-data.js?v=20260328s"></script>
   <script src="shared/portal.js?v=20261012a"></script>
-  <script src="shared/config-ui.js?v=20260930c"></script>
+  <script src="shared/config-ui.js?v=20261012b"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
@@ -837,18 +864,45 @@
       const panel = document.getElementById("mainPanel");
       panel.innerHTML = cfg.categories
         .map((cat) => {
-          const links = (cat.links || []).map((l) => NavStore.normalizeLink(l));
+          const children = Array.isArray(cat.children) ? cat.children : [];
+          const parentLinks = (cat.links || []).map((l) => NavStore.normalizeLink(l));
+          let body = "";
+          if (!children.length) {
+            body = `<div class="links-wrap">${Portal.iconLinks(parentLinks)}</div>`;
+          } else {
+            const blocks = [];
+            if (parentLinks.length) {
+              blocks.push(`
+                <div class="cat-sub" data-ungrouped>
+                  <div class="cat-subhead"><span>未分组</span></div>
+                  <div class="links-wrap">${Portal.iconLinks(parentLinks)}</div>
+                </div>`);
+            }
+            children.forEach((ch) => {
+              const links = (ch.links || []).map((l) => NavStore.normalizeLink(l));
+              blocks.push(`
+                <div class="cat-sub" data-child="${ch.id}">
+                  <div class="cat-subhead"><span>${ch.name}</span></div>
+                  <div class="links-wrap">${Portal.iconLinks(links)}</div>
+                </div>`);
+            });
+            body = blocks.join("") || `<div class="links-wrap"></div>`;
+          }
           return `
             <section class="card cat-card" id="cat-${cat.id}" data-cat="${cat.id}">
               <div class="card-h"><span>${cat.name}</span></div>
-              <div class="links-wrap">${Portal.iconLinks(links)}</div>
+              ${body}
             </section>`;
         })
         .join("");
       Portal.hydrateFavicons(panel);
-      const domains = cfg.categories.flatMap((c) =>
-        (c.links || []).map((l) => l.domain || NavStore.domainFromUrl(l.url)).filter(Boolean)
-      );
+      const domains = cfg.categories.flatMap((c) => {
+        const own = (c.links || []).map((l) => l.domain || NavStore.domainFromUrl(l.url));
+        const kids = (c.children || []).flatMap((ch) =>
+          (ch.links || []).map((l) => l.domain || NavStore.domainFromUrl(l.url))
+        );
+        return [...own, ...kids].filter(Boolean);
+      });
       Portal.prefetchFavicons(domains);
     }
 
