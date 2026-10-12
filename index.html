@@ -695,22 +695,54 @@
       min-width: 0;
     }
 
-    .cat-stack {
-      display: grid;
-      gap: 0.85rem;
-      scroll-margin-top: 1rem;
-      width: 100%;
-      min-width: 0;
-    }
-
     .cat-card {
       scroll-margin-top: 1rem;
       width: 100%;
     }
 
-    .cat-stack.is-target > .cat-card,
     .cat-card.is-target {
       box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent), var(--shadow);
+    }
+
+    /* 一级名 + 二级标签层叠在同一行头部 */
+    .card-h.cat-h-row {
+      justify-content: flex-start;
+      align-items: center;
+      gap: 0.45rem;
+      flex-wrap: wrap;
+    }
+
+    .cat-tabs {
+      display: contents;
+    }
+
+    .cat-tab {
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 0;
+      padding: 0;
+      font-size: 13px;
+      font-weight: 650;
+      line-height: 1.3;
+      cursor: pointer;
+    }
+
+    .cat-tab.cat-tab-root {
+      font-weight: 700;
+      color: inherit;
+    }
+
+    .cat-tab:hover {
+      color: var(--accent);
+    }
+
+    .cat-tab.active {
+      color: var(--accent);
+    }
+
+    .cat-tab.cat-tab-root.active {
+      color: inherit;
     }
 
     @media (max-width: 900px) {
@@ -842,13 +874,36 @@
       Portal.bindTheme();
     }
 
-    function moduleHtml(title, links, { id, catId, moduleId }) {
-      const normalized = (links || []).map((l) => NavStore.normalizeLink(l));
-      return `
-        <section class="card cat-card" ${id ? `id="${id}"` : ""} data-cat="${catId}" data-module="${moduleId || ""}">
-          <div class="card-h"><span>${title}</span></div>
-          <div class="links-wrap">${Portal.iconLinks(normalized)}</div>
-        </section>`;
+    /** 记住每个一级下当前选中的二级（"" = 一级本身） */
+    const catTabSel = (() => {
+      try {
+        return JSON.parse(sessionStorage.getItem("cl-nav-cat-tab-v1") || "{}") || {};
+      } catch {
+        return {};
+      }
+    })();
+
+    function saveCatTabSel() {
+      try {
+        sessionStorage.setItem("cl-nav-cat-tab-v1", JSON.stringify(catTabSel));
+      } catch (_) {}
+    }
+
+    function resolveCatTab(cat) {
+      const children = Array.isArray(cat.children) ? cat.children : [];
+      if (!children.length) return "";
+      const cur = catTabSel[cat.id];
+      if (cur === "" || cur == null) return "";
+      if (children.some((ch) => ch.id === cur)) return cur;
+      return "";
+    }
+
+    function linksForCatTab(cat, tabId) {
+      if (!tabId) {
+        return (cat.links || []).map((l) => NavStore.normalizeLink(l));
+      }
+      const child = (cat.children || []).find((ch) => ch.id === tabId);
+      return ((child && child.links) || []).map((l) => NavStore.normalizeLink(l));
     }
 
     function renderAllCategories() {
@@ -858,44 +913,45 @@
           const children = Array.isArray(cat.children) ? cat.children : [];
           const parentLinks = cat.links || [];
 
-          // 无二级：仍是单个独立模块
+          // 无二级：普通单模块
           if (!children.length) {
-            return moduleHtml(cat.name, parentLinks, {
-              id: `cat-${cat.id}`,
-              catId: cat.id,
-              moduleId: "root",
-            });
+            const links = parentLinks.map((l) => NavStore.normalizeLink(l));
+            return `
+              <section class="card cat-card" id="cat-${cat.id}" data-cat="${cat.id}">
+                <div class="card-h"><span>${cat.name}</span></div>
+                <div class="links-wrap">${Portal.iconLinks(links)}</div>
+              </section>`;
           }
 
-          // 有二级：层叠独立模块——一级（有站点时）+ 各二级，各自一块卡片
-          const modules = [];
-          if (parentLinks.length) {
-            modules.push(
-              moduleHtml(cat.name, parentLinks, {
-                catId: cat.id,
-                moduleId: "root",
-              })
-            );
-          }
-          children.forEach((ch) => {
-            modules.push(
-              moduleHtml(ch.name, ch.links || [], {
-                id: `cat-${cat.id}--${ch.id}`,
-                catId: cat.id,
-                moduleId: ch.id,
-              })
-            );
-          });
-          // 若一级无站点且也无子内容，仍保留一级空模块以免侧栏锚点丢失
-          if (!modules.length) {
-            modules.push(
-              moduleHtml(cat.name, [], {
-                catId: cat.id,
-                moduleId: "root",
-              })
-            );
-          }
-          return `<div class="cat-stack" id="cat-${cat.id}" data-cat="${cat.id}">${modules.join("")}</div>`;
+          // 有二级：一个模块里，一级名与二级名层叠排在同一行头部
+          const activeTab = resolveCatTab(cat);
+          const tabs = [
+            { id: "", name: cat.name, root: true, active: activeTab === "" },
+            ...children.map((ch) => ({
+              id: ch.id,
+              name: ch.name,
+              root: false,
+              active: activeTab === ch.id,
+            })),
+          ];
+          const tabsHtml = tabs
+            .map(
+              (t) => `
+              <button type="button" class="cat-tab ${t.root ? "cat-tab-root" : ""} ${
+                t.active ? "active" : ""
+              }" role="tab" aria-selected="${t.active ? "true" : "false"}" data-cat-tab="${cat.id}" data-child="${
+                t.id
+              }">${t.name}</button>`
+            )
+            .join("");
+          const links = linksForCatTab(cat, activeTab);
+          return `
+            <section class="card cat-card" id="cat-${cat.id}" data-cat="${cat.id}">
+              <div class="card-h cat-h-row" role="tablist" aria-label="${cat.name}">
+                <div class="cat-tabs">${tabsHtml}</div>
+              </div>
+              <div class="links-wrap" data-links-for="${cat.id}">${Portal.iconLinks(links)}</div>
+            </section>`;
         })
         .join("");
       Portal.hydrateFavicons(panel);
@@ -909,11 +965,34 @@
       Portal.prefetchFavicons(domains);
     }
 
+    document.getElementById("mainPanel")?.addEventListener("click", (e) => {
+      const tab = e.target.closest(".cat-tab[data-cat-tab]");
+      if (!tab) return;
+      e.preventDefault();
+      const catId = tab.dataset.catTab;
+      const childId = tab.dataset.child || "";
+      const cat = cfg.categories.find((c) => c.id === catId);
+      if (!cat) return;
+      catTabSel[catId] = childId;
+      saveCatTabSel();
+      const section = tab.closest(".cat-card");
+      section?.querySelectorAll(".cat-tab").forEach((btn) => {
+        const on = (btn.dataset.child || "") === childId;
+        btn.classList.toggle("active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      const wrap = section?.querySelector(`[data-links-for="${catId}"]`);
+      if (wrap) {
+        wrap.innerHTML = Portal.iconLinks(linksForCatTab(cat, childId));
+        Portal.hydrateFavicons(wrap);
+      }
+    });
+
     function clearSideActive() {
       activeId = "";
       document.querySelectorAll("#sideMenu [data-id]").forEach((el) => el.classList.remove("active"));
       document.querySelectorAll("#topNav [data-id]").forEach((el) => el.classList.remove("active"));
-      document.querySelectorAll(".cat-card, .cat-stack").forEach((el) => el.classList.remove("is-target"));
+      document.querySelectorAll(".cat-card").forEach((el) => el.classList.remove("is-target"));
     }
 
     function setSideActive(id) {
@@ -937,7 +1016,7 @@
         }
         el.classList.toggle("active", Boolean(active));
       });
-      document.querySelectorAll(".cat-card, .cat-stack").forEach((el) => {
+      document.querySelectorAll(".cat-card").forEach((el) => {
         el.classList.toggle("is-target", el.dataset.cat === id);
       });
     }
