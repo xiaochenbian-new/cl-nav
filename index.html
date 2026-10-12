@@ -704,47 +704,50 @@
       box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent), var(--shadow);
     }
 
-    .card-h {
-      gap: 0.55rem;
+    .card-h.cat-h-row {
+      justify-content: flex-start;
+      gap: 0.4rem;
       flex-wrap: wrap;
-    }
-
-    .card-h > span:first-child {
-      flex-shrink: 0;
     }
 
     .cat-tabs {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 0.3rem;
-      margin-left: auto;
-      min-width: 0;
+      display: contents;
     }
 
     .cat-tab {
-      border: 1px solid var(--line);
-      background: var(--bg);
+      border: 1px solid transparent;
+      background: transparent;
       color: var(--muted);
       border-radius: 999px;
-      padding: 0.18rem 0.65rem;
+      padding: 0.15rem 0.55rem;
       font-size: 12px;
-      font-weight: 600;
+      font-weight: 650;
       line-height: 1.4;
       cursor: pointer;
       transition: border-color 0.12s, background 0.12s, color 0.12s;
     }
 
+    .cat-tab.cat-tab-root {
+      padding-left: 0;
+      font-size: 13px;
+      font-weight: 700;
+      color: inherit;
+    }
+
     .cat-tab:hover {
-      border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
       color: var(--accent);
     }
 
     .cat-tab.active {
-      border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+      border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
       background: var(--accent-soft);
       color: var(--accent);
+    }
+
+    .cat-tab.cat-tab-root.active {
+      border-color: transparent;
+      background: transparent;
+      color: inherit;
     }
 
     @media (max-width: 900px) {
@@ -894,15 +897,11 @@
     function resolveCatTab(cat) {
       const children = Array.isArray(cat.children) ? cat.children : [];
       if (!children.length) return "";
-      const hasUngrouped = (cat.links || []).length > 0;
-      const tabs = [];
-      if (hasUngrouped) tabs.push("");
-      children.forEach((ch) => tabs.push(ch.id));
-      if (!tabs.length) return "";
       const cur = catTabSel[cat.id];
-      if (cur === "" && hasUngrouped) return "";
-      if (cur && children.some((ch) => ch.id === cur)) return cur;
-      return tabs[0];
+      // "" = 一级默认（展示一级下网站）；子类 id 合法则沿用
+      if (cur === "" || cur == null) return "";
+      if (children.some((ch) => ch.id === cur)) return cur;
+      return "";
     }
 
     function linksForCatTab(cat, tabId) {
@@ -919,42 +918,39 @@
         .map((cat) => {
           const children = Array.isArray(cat.children) ? cat.children : [];
           const parentLinks = cat.links || [];
-          let tabsHtml = "";
+          let headHtml = `<span>${cat.name}</span>`;
           let activeTab = "";
           if (children.length) {
             activeTab = resolveCatTab(cat);
-            const tabs = [];
-            if (parentLinks.length) {
-              tabs.push({
-                id: "",
-                name: "未分组",
-                active: activeTab === "",
-              });
-            }
-            children.forEach((ch) => {
-              tabs.push({
+            // 一级名称作为默认项，二级分类紧跟排在后面（无「未分组」）
+            const tabs = [
+              { id: "", name: cat.name, root: true, active: activeTab === "" },
+              ...children.map((ch) => ({
                 id: ch.id,
                 name: ch.name,
+                root: false,
                 active: activeTab === ch.id,
-              });
-            });
-            if (tabs.length) {
-              tabsHtml = `<div class="cat-tabs" role="tablist" aria-label="${cat.name} 子分类">
-                ${tabs
-                  .map(
-                    (t) => `
-                  <button type="button" class="cat-tab ${t.active ? "active" : ""}" role="tab" aria-selected="${
-                    t.active ? "true" : "false"
-                  }" data-cat-tab="${cat.id}" data-child="${t.id}">${t.name}</button>`
-                  )
-                  .join("")}
-              </div>`;
-            }
+              })),
+            ];
+            headHtml = `<div class="cat-tabs" role="tablist" aria-label="${cat.name}">
+              ${tabs
+                .map(
+                  (t) => `
+                <button type="button" class="cat-tab ${t.root ? "cat-tab-root" : ""} ${
+                  t.active ? "active" : ""
+                }" role="tab" aria-selected="${t.active ? "true" : "false"}" data-cat-tab="${
+                    cat.id
+                  }" data-child="${t.id}">${t.name}</button>`
+                )
+                .join("")}
+            </div>`;
           }
-          const links = children.length ? linksForCatTab(cat, activeTab) : parentLinks.map((l) => NavStore.normalizeLink(l));
+          const links = children.length
+            ? linksForCatTab(cat, activeTab)
+            : parentLinks.map((l) => NavStore.normalizeLink(l));
           return `
             <section class="card cat-card" id="cat-${cat.id}" data-cat="${cat.id}">
-              <div class="card-h"><span>${cat.name}</span>${tabsHtml}</div>
+              <div class="card-h ${children.length ? "cat-h-row" : ""}">${headHtml}</div>
               <div class="links-wrap" data-links-for="${cat.id}">${Portal.iconLinks(links)}</div>
             </section>`;
         })
