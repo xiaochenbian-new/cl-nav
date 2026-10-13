@@ -1,6 +1,37 @@
 /** CL Nav — configurable store (localStorage) */
 (function () {
   const KEY = "cl-nav-config-v1";
+  /** 已删除的「CL 应用」seed 链接墓碑：防止刷新后被 ensureClApps 复活 */
+  const TOMB_KEY = "cl-nav-removed-seeds-v1";
+  const CAT_CL_TOMB = "cat:cl_apps";
+
+  function loadTombstones() {
+    try {
+      const arr = JSON.parse(localStorage.getItem(TOMB_KEY) || "[]");
+      return new Set(Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : []);
+    } catch {
+      return new Set();
+    }
+  }
+
+  function saveTombstones(set) {
+    try {
+      localStorage.setItem(TOMB_KEY, JSON.stringify([...set]));
+    } catch (_) {}
+  }
+
+  function rememberRemovedLinks(links) {
+    const tomb = loadTombstones();
+    let added = false;
+    (links || []).forEach((l) => {
+      const key = linkKey(l);
+      if (key && !tomb.has(key)) {
+        tomb.add(key);
+        added = true;
+      }
+    });
+    if (added) saveTombstones(tomb);
+  }
 
   function uid(prefix = "id") {
     return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
@@ -246,6 +277,7 @@
     const config = normalizeConfig(cfg);
     const seed = clAppsSeedLinks();
     if (!seed.length) return config;
+    const tombstones = loadTombstones();
 
     const seedByKey = new Map(seed.map((l) => [linkKey(l), l]));
     const aliasToCanonical = new Map();
@@ -257,6 +289,8 @@
       config.categories.find((c) => c.id === "cl_apps") ||
       config.categories.find((c) => String(c.name || "").trim() === "CL 应用");
     if (!cat) {
+      // 用户删除过整个「CL 应用」分类：不再强制重建
+      if (tombstones.has(CAT_CL_TOMB)) return config;
       cat = { id: "cl_apps", name: "CL 应用", links: [], children: [] };
       config.categories.unshift(cat);
     } else {
@@ -297,7 +331,8 @@
 
     seed.forEach((seeded) => {
       const key = linkKey(seeded);
-      if (!key || seen.has(key)) return;
+      // 墓碑里的 seed 视为用户已删除，不再补回
+      if (!key || seen.has(key) || tombstones.has(key)) return;
       seen.add(key);
       nextLinks.push(seeded);
     });
@@ -449,6 +484,8 @@
     },
 
     reset() {
+      // 恢复默认 = 清空删除墓碑，CL 应用 seed 一并回来
+      saveTombstones(new Set());
       applyState(buildDefaults());
     },
 
@@ -643,6 +680,13 @@
     },
 
     removeCategory(id) {
+      if (id === "cl_apps") {
+        const tomb = loadTombstones();
+        if (!tomb.has(CAT_CL_TOMB)) {
+          tomb.add(CAT_CL_TOMB);
+          saveTombstones(tomb);
+        }
+      }
       state.categories = state.categories.filter((c) => c.id !== id);
       persist();
     },
@@ -712,7 +756,9 @@
     removeLink(catId, index, childId) {
       const leaf = resolveLeaf(state.categories, catId, childId || null);
       if (!leaf) return;
+      const removed = leaf.links[index];
       leaf.links.splice(index, 1);
+      rememberRemovedLinks([removed]);
       persist();
     },
 
@@ -726,7 +772,9 @@
           .filter((i) => Number.isInteger(i) && i >= 0 && i < leaf.links.length)
       );
       if (!set.size) return;
+      const removed = leaf.links.filter((_, i) => set.has(i));
       leaf.links = leaf.links.filter((_, i) => !set.has(i));
+      rememberRemovedLinks(removed);
       persist();
     },
 

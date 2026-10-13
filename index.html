@@ -704,60 +704,102 @@
       box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent), var(--shadow);
     }
 
-    /* 一级名 + 二级标签层叠在同一行头部 */
+    /* 分类头部：浏览器标签页式 —— 一级在前默认选中，子分类以流动线条间隔层叠其后 */
     .card-h.cat-h-row {
-      justify-content: flex-start;
-      align-items: center;
-      gap: 0.45rem;
-      flex-wrap: wrap;
+      display: block;
+      margin-bottom: 0.85rem;
     }
 
     .cat-tabs {
-      display: contents;
+      display: flex;
+      align-items: flex-end;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding: 0 0.35rem;
+      border-bottom: 1.5px solid var(--line); /* 流动基线，与每个 Tab 的弧线相连 */
+    }
+
+    .cat-tabs::-webkit-scrollbar {
+      display: none;
     }
 
     .cat-tab {
-      border: none;
+      position: relative;
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
       background: transparent;
+      padding: 0.42rem 1.05rem 0.55rem;
+      margin-right: 0.3rem;
       color: var(--muted);
-      border-radius: 0;
-      padding: 0;
-      font-size: 13px;
-      font-weight: 650;
-      line-height: 1.3;
+      font-size: 12.5px;
+      font-weight: 600;
+      line-height: 1.25;
+      white-space: nowrap;
       cursor: pointer;
+      transition: color 0.15s;
+    }
+
+    .cat-tab .cat-tab-label {
+      position: relative; /* 置于形状描边之上 */
+    }
+
+    /* Tab 外形：肩部弧线向下延伸接入基线（浏览器标签页轮廓） */
+    .cat-tab .tab-shape {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      pointer-events: none;
+    }
+
+    .cat-tab .tab-shape path {
+      fill: transparent;
+      stroke: var(--line);
+      stroke-width: 1.5;
+      vector-effect: non-scaling-stroke;
+      transition: stroke 0.15s, fill 0.15s;
     }
 
     .cat-tab.cat-tab-root {
       font-weight: 700;
-      color: inherit;
+      color: var(--ink);
+    }
+
+    .cat-tab.cat-tab-root.active {
+      color: var(--accent);
     }
 
     .cat-tab:hover {
       color: var(--accent);
     }
 
-    .cat-tab.active {
-      color: var(--accent);
+    .cat-tab:hover .tab-shape path {
+      stroke: color-mix(in srgb, var(--accent) 55%, var(--line));
+      fill: color-mix(in srgb, var(--accent) 6%, transparent);
     }
 
-    .cat-tab.cat-tab-root.active {
-      color: inherit;
+    .cat-tab.active .tab-shape path {
+      stroke: color-mix(in srgb, var(--accent) 60%, var(--line));
+      fill: var(--accent-soft);
     }
 
-    /* 有二级时：一级名在前（默认），子级以小胶囊层叠排在后面 */
-    .cat-tab:not(.cat-tab-root) {
-      padding: 0.14rem 0.6rem;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      font-size: 12px;
-      background: color-mix(in srgb, var(--bg) 55%, var(--panel));
+    .cat-tab.is-static {
+      cursor: default;
     }
 
-    .cat-tab:not(.cat-tab-root).active {
-      color: var(--accent);
-      border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-      background: var(--accent-soft);
+    .cat-tab.is-static:hover {
+      color: var(--ink);
+    }
+
+    .cat-tab.is-static:hover .tab-shape path {
+      stroke: var(--line);
+      fill: transparent;
     }
 
     /* 同应用多环境入口：正面一级卡片，背面以投影层叠示意 */
@@ -922,7 +964,7 @@
   <script src="shared/data.js?v=20261008a"></script>
   <script src="shared/api-base.js?v=20260328s"></script>
   <script src="shared/favicon-cache.js"></script>
-  <script src="shared/store.js?v=20261012b"></script>
+  <script src="shared/store.js?v=20261013a"></script>
   <script src="shared/auth.js"></script>
   <script src="shared/login-ui.js"></script>
   <script src="shared/cf-sync.js?v=20260930a"></script>
@@ -999,6 +1041,10 @@
       return ((child && child.links) || []).map((l) => NavStore.normalizeLink(l));
     }
 
+    /** 浏览器标签页轮廓：肩部弧线向下汇入基线（横向拉伸自适应，描边恒定 1.5px） */
+    const TAB_SHAPE =
+      '<svg class="tab-shape" viewBox="0 0 100 33" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M 0 33 C 9 33 14 29 14 20 L 14 13 Q 14 1 26 1 L 74 1 Q 86 1 86 13 L 86 20 C 86 29 91 33 100 33" /></svg>';
+
     function renderAllCategories() {
       const panel = document.getElementById("mainPanel");
       panel.innerHTML = cfg.categories
@@ -1006,17 +1052,21 @@
           const children = Array.isArray(cat.children) ? cat.children : [];
           const parentLinks = cat.links || [];
 
-          // 无二级：普通单模块
+          // 无二级：单个 Tab 的模块
           if (!children.length) {
             const links = parentLinks.map((l) => NavStore.normalizeLink(l));
             return `
               <section class="card cat-card" id="cat-${cat.id}" data-cat="${cat.id}">
-                <div class="card-h"><span>${cat.name}</span></div>
+                <div class="card-h cat-h-row">
+                  <div class="cat-tabs">
+                    <span class="cat-tab cat-tab-root is-static">${TAB_SHAPE}<span class="cat-tab-label">${cat.name}</span></span>
+                  </div>
+                </div>
                 <div class="links-wrap">${Portal.linkStacks(Portal.groupStackLinks(links))}</div>
               </section>`;
           }
 
-          // 有二级：一个模块里，一级名与二级名层叠排在同一行头部
+          // 有二级：一个模块里，一级名默认选中，子分类以流动线条间隔层叠其后
           const activeTab = resolveCatTab(cat);
           const tabs = [
             { id: "", name: cat.name, root: true, active: activeTab === "" },
@@ -1034,7 +1084,7 @@
                 t.active ? "active" : ""
               }" role="tab" aria-selected="${t.active ? "true" : "false"}" data-cat-tab="${cat.id}" data-child="${
                 t.id
-              }">${t.name}</button>`
+              }">${TAB_SHAPE}<span class="cat-tab-label">${t.name}</span></button>`
             )
             .join("");
           const links = linksForCatTab(cat, activeTab);
