@@ -277,6 +277,86 @@
         .join("");
     },
 
+    /** 「应用名 - 环境」后缀拆分（生产/测试/预览等），无后缀时 env 为空；分隔符必须带空格，避免误伤 deepseek-usage 这类连字符名 */
+    splitTitleEnv(title) {
+      const s = String(title || "").trim();
+      const m = /^(.*\S)\s+[-–—]\s*(\S{1,6})$/.exec(s);
+      return m ? { base: m[1].trim(), env: m[2] } : { base: s, env: "" };
+    },
+
+    /** 同名多环境入口分组：≥2 个成层叠组，其余保持独立卡片；按首次出现顺序输出 */
+    groupStackLinks(list) {
+      const items = (list || []).map((l) => {
+        const { base, env } = this.splitTitleEnv(l.title);
+        return { link: l, base, env };
+      });
+      const order = [];
+      const byBase = new Map();
+      items.forEach((it) => {
+        if (!byBase.has(it.base)) {
+          byBase.set(it.base, []);
+          order.push(it.base);
+        }
+        byBase.get(it.base).push(it);
+      });
+      return order.map((base) => {
+        const group = byBase.get(base);
+        return group.length >= 2 ? { stack: true, items: group } : { stack: false, item: group[0] };
+      });
+    },
+
+    /** 渲染层叠卡片组：正面为默认一级入口，子级环境用标签切换，背面以投影层叠示意 */
+    linkStacks(nodes, cls = "site-card") {
+      const escHtml = (s) =>
+        String(s || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      const escAttr = (s) =>
+        String(s || "")
+          .replace(/&/g, "&amp;")
+          .replace(/"/g, "&quot;")
+          .replace(/</g, "&lt;");
+      return (nodes || [])
+        .map((node) => {
+          if (!node.stack) return this.iconLinks([node.item.link], cls);
+          const faces = node.items
+            .map((it, i) => {
+              const l = it.link;
+              let domain = l.domain;
+              if (!domain && l.url) {
+                try {
+                  domain = new URL(l.url).hostname.replace(/^www\./, "");
+                } catch (_) {}
+              }
+              const icon = domain
+                ? `<img src="${this.favicon(domain)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-domain="${domain}" data-step="0" onerror="Portal.onFaviconError(this)" />`
+                : `<span class="site-fallback">${escHtml(it.base).slice(0, 1)}</span>`;
+              const chips = node.items
+                .map(
+                  (jt, j) =>
+                    `<span class="stack-chip ${j === i ? "is-active" : ""}" data-face="${j}" title="${escAttr(
+                      jt.link.desc || ""
+                    )}">${escHtml(jt.env || "默认")}</span>`
+                )
+                .join("");
+              return `
+          <a class="${cls} stack-face ${i === 0 ? "is-active" : ""}" data-face="${i}" href="${l.url}" target="_blank" rel="noopener noreferrer" title="${escAttr(
+                it.base + (l.desc ? ` — ${l.desc}` : "")
+              )}">
+            <div class="site-head">
+              ${icon}
+              <span class="site-title">${escHtml(it.base)}</span>
+            </div>
+            <p class="stack-switch">${chips}</p>
+          </a>`;
+            })
+            .join("");
+          return `<div class="link-stack" data-count="${node.items.length}">${faces}</div>`;
+        })
+        .join("");
+    },
+
     onFaviconError(img) {
       const domain = img.dataset.domain;
       const step = Number(img.dataset.step || 0);

@@ -745,6 +745,99 @@
       color: inherit;
     }
 
+    /* 有二级时：一级名在前（默认），子级以小胶囊层叠排在后面 */
+    .cat-tab:not(.cat-tab-root) {
+      padding: 0.14rem 0.6rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      font-size: 12px;
+      background: color-mix(in srgb, var(--bg) 55%, var(--panel));
+    }
+
+    .cat-tab:not(.cat-tab-root).active {
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+      background: var(--accent-soft);
+    }
+
+    /* 同应用多环境入口：正面一级卡片，背面以投影层叠示意 */
+    .link-stack {
+      --deck-fill: color-mix(in srgb, var(--bg) 55%, var(--panel));
+      --deck-line: var(--line);
+      min-width: 0;
+    }
+
+    .stack-face {
+      cursor: pointer;
+    }
+
+    .stack-face:not(.is-active) {
+      display: none;
+    }
+
+    .stack-face.is-active {
+      box-shadow:
+        5px 5px 0 -1px var(--deck-fill),
+        5px 5px 0 0 var(--deck-line),
+        10px 10px 0 -2px var(--deck-fill),
+        10px 10px 0 -1px var(--deck-line);
+    }
+
+    .link-stack[data-count="2"] .stack-face.is-active {
+      box-shadow:
+        5px 5px 0 -1px var(--deck-fill),
+        5px 5px 0 0 var(--deck-line);
+    }
+
+    .link-stack .stack-face.is-active:hover {
+      border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+      box-shadow:
+        5px 5px 0 -1px var(--deck-fill),
+        5px 5px 0 0 color-mix(in srgb, var(--accent) 30%, var(--line)),
+        10px 10px 0 -2px var(--deck-fill),
+        10px 10px 0 -1px color-mix(in srgb, var(--accent) 22%, var(--line)),
+        0 6px 16px rgba(31, 36, 48, 0.07);
+    }
+
+    .link-stack[data-count="2"] .stack-face.is-active:hover {
+      box-shadow:
+        5px 5px 0 -1px var(--deck-fill),
+        5px 5px 0 0 color-mix(in srgb, var(--accent) 30%, var(--line)),
+        0 6px 16px rgba(31, 36, 48, 0.07);
+    }
+
+    .stack-switch {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      min-width: 0;
+    }
+
+    .stack-chip {
+      display: inline-block;
+      font-size: 11px;
+      line-height: 1;
+      padding: 0.24rem 0.55rem;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      white-space: nowrap;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+
+    .stack-chip:hover {
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+    }
+
+    .stack-chip.is-active {
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+      background: var(--accent-soft);
+      font-weight: 650;
+    }
+
     @media (max-width: 900px) {
       .page {
         width: min(1180px, calc(100% - 1.5rem));
@@ -835,7 +928,7 @@
   <script src="shared/cf-sync.js?v=20260930a"></script>
   <script src="shared/webdav.js?v=20260930a"></script>
   <script src="shared/library-data.js?v=20260328s"></script>
-  <script src="shared/portal.js?v=20261012a"></script>
+  <script src="shared/portal.js?v=20261013a"></script>
   <script src="shared/config-ui.js?v=20261012b"></script>
   <script>
     if ("serviceWorker" in navigator) {
@@ -919,7 +1012,7 @@
             return `
               <section class="card cat-card" id="cat-${cat.id}" data-cat="${cat.id}">
                 <div class="card-h"><span>${cat.name}</span></div>
-                <div class="links-wrap">${Portal.iconLinks(links)}</div>
+                <div class="links-wrap">${Portal.linkStacks(Portal.groupStackLinks(links))}</div>
               </section>`;
           }
 
@@ -950,7 +1043,9 @@
               <div class="card-h cat-h-row" role="tablist" aria-label="${cat.name}">
                 <div class="cat-tabs">${tabsHtml}</div>
               </div>
-              <div class="links-wrap" data-links-for="${cat.id}">${Portal.iconLinks(links)}</div>
+              <div class="links-wrap" data-links-for="${cat.id}">${Portal.linkStacks(
+            Portal.groupStackLinks(links)
+          )}</div>
             </section>`;
         })
         .join("");
@@ -965,7 +1060,28 @@
       Portal.prefetchFavicons(domains);
     }
 
+    /** 切换层叠卡片组正面显示的子级入口 */
+    function activateStackFace(stack, idx) {
+      if (!stack) return;
+      stack.querySelectorAll(".stack-face").forEach((f) => {
+        f.classList.toggle("is-active", Number(f.dataset.face) === idx);
+      });
+    }
+
     document.getElementById("mainPanel")?.addEventListener("click", (e) => {
+      const chip = e.target.closest(".stack-chip");
+      if (chip) {
+        // 标签在 <a> 内部：阻止冒泡导航，仅切换正面
+        e.preventDefault();
+        activateStackFace(chip.closest(".link-stack"), Number(chip.dataset.face));
+        return;
+      }
+      const face = e.target.closest(".stack-face");
+      if (face && !face.classList.contains("is-active")) {
+        e.preventDefault();
+        activateStackFace(face.closest(".link-stack"), Number(face.dataset.face));
+        return;
+      }
       const tab = e.target.closest(".cat-tab[data-cat-tab]");
       if (!tab) return;
       e.preventDefault();
@@ -983,7 +1099,9 @@
       });
       const wrap = section?.querySelector(`[data-links-for="${catId}"]`);
       if (wrap) {
-        wrap.innerHTML = Portal.iconLinks(linksForCatTab(cat, childId));
+        wrap.innerHTML = Portal.linkStacks(
+          Portal.groupStackLinks(linksForCatTab(cat, childId))
+        );
         Portal.hydrateFavicons(wrap);
       }
     });
