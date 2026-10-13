@@ -1,0 +1,18 @@
+# Cloudflare Pages 缓存策略
+# HTML 每次向服务器校验：发布新版本时浏览器不会卡在旧页面
+/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+# 带版本号（?v=）的静态资源长期缓存，版本变化即自动失效
+/shared/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# 图标 / 字体等不带版本的资源走中短期缓存
+/*.ico
+  Cache-Control: public, max-age=86400
+/*.png
+  Cache-Control: public, max-age=86400
+/*.svg
+  Cache-Control: public, max-age=86400
+/*.woff2
+  Cache-Control: public, max-age=31536000, immutable
