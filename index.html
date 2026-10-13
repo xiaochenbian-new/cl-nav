@@ -704,102 +704,126 @@
       box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent), var(--shadow);
     }
 
-    /* 分类头部：浏览器标签页式 —— 一级在前默认选中，子分类以流动线条间隔层叠其后 */
+    /* 分类头部：分组标题 + 胶囊标签 —— 一级作分组名，二级以其下胶囊并列 */
     .card-h.cat-h-row {
       display: block;
-      margin-bottom: 0.85rem;
+      margin-bottom: 0.9rem;
     }
 
     .cat-tabs {
       display: flex;
-      align-items: flex-end;
-      flex-wrap: nowrap;
-      overflow-x: auto;
-      scrollbar-width: none;
-      padding: 0 0.35rem;
-      border-bottom: 1.5px solid var(--line); /* 流动基线，与每个 Tab 的弧线相连 */
+      align-items: center;
+      gap: 0.7rem;
+      flex-wrap: wrap;
+      min-width: 0;
     }
 
-    .cat-tabs::-webkit-scrollbar {
-      display: none;
-    }
-
-    .cat-tab {
-      position: relative;
-      flex: 0 0 auto;
+    /* 一级分组名：短竖条 + 文字，永远作为左侧锚点 */
+    .cat-tabs .cat-tab.cat-tab-root {
       display: inline-flex;
       align-items: center;
-      justify-content: center;
+      gap: 0.42rem;
+      flex: 0 0 auto;
       border: 0;
       background: transparent;
-      padding: 0.42rem 1.05rem 0.55rem;
-      margin-right: 0.3rem;
-      color: var(--muted);
+      padding: 0;
+      margin: 0;
+      color: var(--ink);
       font-size: 12.5px;
-      font-weight: 600;
-      line-height: 1.25;
+      font-weight: 700;
+      line-height: 1.3;
       white-space: nowrap;
       cursor: pointer;
       transition: color 0.15s;
     }
 
-    .cat-tab .cat-tab-label {
-      position: relative; /* 置于形状描边之上 */
+    .cat-tabs .cat-tab.cat-tab-root:not(.is-static)::before {
+      content: "";
+      width: 4px;
+      height: 14px;
+      border-radius: 2px;
+      background: var(--line);
+      transition: background 0.15s;
     }
 
-    /* Tab 外形：肩部弧线向下延伸接入基线（浏览器标签页轮廓） */
-    .cat-tab .tab-shape {
-      position: absolute;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
-      overflow: visible;
-      pointer-events: none;
-    }
-
-    .cat-tab .tab-shape path {
-      fill: transparent;
-      stroke: var(--line);
-      stroke-width: 1.5;
-      vector-effect: non-scaling-stroke;
-      transition: stroke 0.15s, fill 0.15s;
-    }
-
-    .cat-tab.cat-tab-root {
-      font-weight: 700;
-      color: var(--ink);
-    }
-
-    .cat-tab.cat-tab-root.active {
+    .cat-tabs .cat-tab.cat-tab-root.active {
       color: var(--accent);
     }
 
-    .cat-tab:hover {
+    .cat-tabs .cat-tab.cat-tab-root.active::before {
+      background: linear-gradient(180deg, var(--accent), var(--accent-2));
+    }
+
+    .cat-tabs .cat-tab.cat-tab-root:not(.is-static):hover {
       color: var(--accent);
     }
 
-    .cat-tab:hover .tab-shape path {
-      stroke: color-mix(in srgb, var(--accent) 55%, var(--line));
-      fill: color-mix(in srgb, var(--accent) 6%, transparent);
+    /* 二级分组容器：托住一组胶囊，超出时横向滚动 */
+    .cat-tab-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.32rem;
+      flex-wrap: wrap;
+      min-width: 0;
     }
 
-    .cat-tab.active .tab-shape path {
-      stroke: color-mix(in srgb, var(--accent) 60%, var(--line));
-      fill: var(--accent-soft);
+    .cat-tab-group:empty {
+      display: none;
     }
 
-    .cat-tab.is-static {
+    /* 胶囊标签（二级） */
+    .cat-tabs .cat-tab.cat-tab-child {
+      display: inline-flex;
+      align-items: center;
+      flex: 0 0 auto;
+      border: 1px solid var(--line);
+      background: color-mix(in srgb, var(--bg) 55%, var(--panel));
+      padding: 0.24rem 0.68rem;
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 12.5px;
+      font-weight: 600;
+      line-height: 1.3;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: color 0.15s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .cat-tabs .cat-tab.cat-tab-child:hover {
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+      background: var(--accent-soft);
+    }
+
+    .cat-tabs .cat-tab.cat-tab-child.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 32%, transparent);
+    }
+
+    /* 无二级的模块：一级以纯文字标题呈现，不上胶囊、不可点 */
+    .cat-tabs .cat-tab.cat-tab-root.is-static {
       cursor: default;
-    }
-
-    .cat-tab.is-static:hover {
       color: var(--ink);
+      font-size: 13px;
     }
 
-    .cat-tab.is-static:hover .tab-shape path {
-      stroke: var(--line);
-      fill: transparent;
+    .cat-tabs .cat-tab.cat-tab-root.is-static::before {
+      background: linear-gradient(180deg, var(--accent), var(--accent-2));
+    }
+
+    /* 二级胶囊横向溢出时的滚动容器（窄屏） */
+    @media (max-width: 640px) {
+      .cat-tab-group {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        max-width: 100%;
+      }
+      .cat-tab-group::-webkit-scrollbar {
+        display: none;
+      }
     }
 
     /* 同应用多环境入口：正面一级卡片，背面以投影层叠示意 */
@@ -1041,9 +1065,8 @@
       return ((child && child.links) || []).map((l) => NavStore.normalizeLink(l));
     }
 
-    /** 浏览器标签页轮廓：肩部弧线向下汇入基线（横向拉伸自适应，描边恒定 1.5px） */
-    const TAB_SHAPE =
-      '<svg class="tab-shape" viewBox="0 0 100 33" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M 0 33 C 9 33 14 29 14 20 L 14 13 Q 14 1 26 1 L 74 1 Q 86 1 86 13 L 86 20 C 86 29 91 33 100 33" /></svg>';
+    /** 浏览器标签页轮廓：已弃用（改用分组胶囊），保留常量以免遗留引用报错 */
+    const TAB_SHAPE = "";
 
     function renderAllCategories() {
       const panel = document.getElementById("mainPanel");
@@ -1052,46 +1075,43 @@
           const children = Array.isArray(cat.children) ? cat.children : [];
           const parentLinks = cat.links || [];
 
-          // 无二级：单个 Tab 的模块
+          // 无二级：一级作为静态分组标题
           if (!children.length) {
             const links = parentLinks.map((l) => NavStore.normalizeLink(l));
             return `
               <section class="card cat-card" id="cat-${cat.id}" data-cat="${cat.id}">
                 <div class="card-h cat-h-row">
                   <div class="cat-tabs">
-                    <span class="cat-tab cat-tab-root is-static">${TAB_SHAPE}<span class="cat-tab-label">${cat.name}</span></span>
+                    <span class="cat-tab cat-tab-root is-static"><span class="cat-tab-label">${cat.name}</span></span>
                   </div>
                 </div>
                 <div class="links-wrap">${Portal.linkStacks(Portal.groupStackLinks(links))}</div>
               </section>`;
           }
 
-          // 有二级：一个模块里，一级名默认选中，子分类以流动线条间隔层叠其后
+          // 有二级：一级作分组名（可点击回到全部），二级以其下胶囊并列
           const activeTab = resolveCatTab(cat);
-          const tabs = [
-            { id: "", name: cat.name, root: true, active: activeTab === "" },
-            ...children.map((ch) => ({
-              id: ch.id,
-              name: ch.name,
-              root: false,
-              active: activeTab === ch.id,
-            })),
-          ];
-          const tabsHtml = tabs
+          const rootTab = `
+            <button type="button" class="cat-tab cat-tab-root ${
+              activeTab === "" ? "active" : ""
+            }" role="tab" aria-selected="${activeTab === "" ? "true" : "false"}" data-cat-tab="${
+              cat.id
+            }" data-child=""><span class="cat-tab-label">${cat.name}</span></button>`;
+          const childTabs = children
             .map(
-              (t) => `
-              <button type="button" class="cat-tab ${t.root ? "cat-tab-root" : ""} ${
-                t.active ? "active" : ""
-              }" role="tab" aria-selected="${t.active ? "true" : "false"}" data-cat-tab="${cat.id}" data-child="${
-                t.id
-              }">${TAB_SHAPE}<span class="cat-tab-label">${t.name}</span></button>`
+              (ch) => `
+              <button type="button" class="cat-tab cat-tab-child ${
+                activeTab === ch.id ? "active" : ""
+              }" role="tab" aria-selected="${activeTab === ch.id ? "true" : "false"}" data-cat-tab="${
+                cat.id
+              }" data-child="${ch.id}"><span class="cat-tab-label">${ch.name}</span></button>`
             )
             .join("");
           const links = linksForCatTab(cat, activeTab);
           return `
             <section class="card cat-card" id="cat-${cat.id}" data-cat="${cat.id}">
               <div class="card-h cat-h-row" role="tablist" aria-label="${cat.name}">
-                <div class="cat-tabs">${tabsHtml}</div>
+                <div class="cat-tabs">${rootTab}<span class="cat-tab-group">${childTabs}</span></div>
               </div>
               <div class="links-wrap" data-links-for="${cat.id}">${Portal.linkStacks(
             Portal.groupStackLinks(links)
@@ -1142,7 +1162,7 @@
       catTabSel[catId] = childId;
       saveCatTabSel();
       const section = tab.closest(".cat-card");
-      section?.querySelectorAll(".cat-tab").forEach((btn) => {
+      section?.querySelectorAll(".cat-tab[data-cat-tab]").forEach((btn) => {
         const on = (btn.dataset.child || "") === childId;
         btn.classList.toggle("active", on);
         btn.setAttribute("aria-selected", on ? "true" : "false");
