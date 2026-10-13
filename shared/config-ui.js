@@ -40,6 +40,37 @@
     } catch (_) {}
   }
 
+  /**
+   * 网站剪贴板：复制/剪切后可跨分类、跨子分类粘贴。
+   * mode: "copy" 保留源站；"cut" 粘贴时从源移走。仅存于内存 + sessionStorage。
+   */
+  const LINK_CLIP_KEY = "cl-nav-link-clip-v1";
+  let linkClip = (() => {
+    try {
+      const raw = JSON.parse(sessionStorage.getItem(LINK_CLIP_KEY) || "null");
+      if (raw && Array.isArray(raw.links)) return raw;
+    } catch (_) {}
+    return { mode: "copy", links: [] };
+  })();
+
+  function setLinkClip(mode, links) {
+    linkClip = { mode: mode === "cut" ? "cut" : "copy", links: links || [] };
+    try {
+      sessionStorage.setItem(LINK_CLIP_KEY, JSON.stringify(linkClip));
+    } catch (_) {}
+  }
+
+  function clearLinkClip() {
+    linkClip = { mode: "copy", links: [] };
+    try {
+      sessionStorage.removeItem(LINK_CLIP_KEY);
+    } catch (_) {}
+  }
+
+  function clipCount() {
+    return (linkClip.links || []).length;
+  }
+
   /** HTML5 drag-reorder for .cfg-item lists (drag from ⠿ handle) */
   function bindDragSort(listEl, { onReorder }) {
     if (!listEl) return;
@@ -703,6 +734,110 @@
     });
   }
 
+  /**
+   * 选择「粘贴目标」分类 / 子分类。返回 {catId, childId} 或 null。
+   * 目标下拉列出全部一级分类，选中带子分类的一级后出现二级下拉。
+   */
+  function openPasteTargetDialog({ count = 0, mode = "copy", title = "选择目标分类" } = {}) {
+    return new Promise((resolve) => {
+      const old = document.getElementById("cfgPasteDialog");
+      if (old) old.remove();
+
+      const cats = (NavStore.get().categories || []).filter(Boolean);
+      if (!cats.length) {
+        alert("还没有任何分类，请先新建分类。");
+        resolve(null);
+        return;
+      }
+
+      const overlay = document.createElement("div");
+      overlay.id = "cfgPasteDialog";
+      overlay.className = "cfg-dialog-overlay";
+      overlay.innerHTML = `
+        <div class="cfg-dialog" role="dialog" aria-modal="true" aria-labelledby="cfgPasteTitle">
+          <h3 id="cfgPasteTitle">${esc(title)}</h3>
+          <p class="settings-tip" style="margin:0 0 0.6rem">
+            共 ${count} 个网站，将以「${mode === "cut" ? "移动" : "复制"}」方式放到：
+          </p>
+          <label class="cfg-field">
+            <span>一级分类</span>
+            <select id="cfgPasteCat"></select>
+          </label>
+          <label class="cfg-field" id="cfgPasteChildWrap" hidden>
+            <span>子分类</span>
+            <select id="cfgPasteChild"></select>
+          </label>
+          <p class="cfg-dialog-err" id="cfgPasteErr" hidden></p>
+          <div class="cfg-dialog-actions">
+            <button type="button" class="cfg-btn" id="cfgPasteCancel">取消</button>
+            <button type="button" class="cfg-btn primary" id="cfgPasteOk">确定</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      const catSel = overlay.querySelector("#cfgPasteCat");
+      const childSel = overlay.querySelector("#cfgPasteChild");
+      const childWrap = overlay.querySelector("#cfgPasteChildWrap");
+
+      const fillCats = () => {
+        catSel.innerHTML = cats
+          .map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`)
+          .join("");
+      };
+
+      const fillChildren = () => {
+        const cat = cats.find((c) => c.id === catSel.value);
+        const kids = (cat && cat.children) || [];
+        if (!kids.length) {
+          childWrap.hidden = true;
+          childSel.innerHTML = "";
+          return;
+        }
+        childWrap.hidden = false;
+        childSel.innerHTML =
+          `<option value="">未分组（${esc(cat.name)} 直属）</option>` +
+          kids.map((ch) => `<option value="${esc(ch.id)}">${esc(ch.name)}</option>`).join("");
+      };
+
+      fillCats();
+      fillChildren();
+
+      const close = (result) => {
+        overlay.remove();
+        document.removeEventListener("keydown", onKey);
+        resolve(result);
+      };
+
+      const onKey = (e) => {
+        if (e.key === "Escape") close(null);
+        if (e.key === "Enter") {
+          e.preventDefault();
+          submit();
+        }
+      };
+      const submit = () => {
+        const catId = catSel.value;
+        if (!catId) {
+          const errEl = overlay.querySelector("#cfgPasteErr");
+          errEl.hidden = false;
+          errEl.textContent = "请选择目标分类";
+          return;
+        }
+        close({ catId, childId: childWrap.hidden ? "" : childSel.value || "" });
+      };
+
+      catSel.addEventListener("change", fillChildren);
+      document.addEventListener("keydown", onKey);
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) close(null);
+      });
+      overlay.querySelector("#cfgPasteCancel").addEventListener("click", () => close(null));
+      overlay.querySelector("#cfgPasteOk").addEventListener("click", submit);
+      catSel.focus();
+    });
+  }
+
   function channelOptionsHtml(selected) {
     const channels = window.LibraryStorage?.channels || [
       { id: "direct", name: "直链" },
@@ -1087,12 +1222,17 @@
                   }
                 </div>
               </div>
-              <p class="settings-tip" style="margin:0 0 0.45rem">拖动卡片可排序；拖到左侧一级/二级可迁移；勾选后可批量删除</p>
+              <p class="settings-tip" style="margin:0 0 0.45rem">拖动卡片可排序；拖到左侧一级/二级可迁移；勾选后可批量删除、复制或移动；也可右键卡片操作</p>
               ${
                 selected && leafLinks.length
                   ? `<div class="cfg-batch-bar">
                       <label class="chk"><input type="checkbox" id="cfgLinkCheckAll" /> 全选</label>
-                      <button type="button" class="cfg-btn danger" id="cfgBatchDelLinks" disabled>批量删除</button>
+                      <button type="button" class="cfg-btn" id="cfgBatchCopyLinks" disabled>复制</button>
+                      <button type="button" class="cfg-btn" id="cfgBatchCutLinks" disabled>剪切</button>
+                      <button type="button" class="cfg-btn danger" id="cfgBatchDelLinks" disabled>删除</button>
+                      <button type="button" class="cfg-btn primary" id="cfgBatchPaste" hidden>粘贴到…</button>
+                      <span class="cfg-clip-chip" id="cfgClipChip" hidden></span>
+                      <button type="button" class="cfg-clip-clear" id="cfgClipClear" hidden title="清空剪贴板">×</button>
                       <span class="settings-tip" id="cfgBatchHint">已选 0 项</span>
                     </div>`
                   : ""
@@ -1134,6 +1274,7 @@
               </div>
             </div>
           </div>
+          <div class="cfg-menu" id="cfgLinkMenu" hidden role="menu"></div>
         </div>
         <div class="cfg-pane" data-pane="library" ${tab !== "library" ? "hidden" : ""}>
           <div class="cfg-toolbar cfg-lib-toolbar">
@@ -2213,13 +2354,88 @@
         const checked = boxes.filter((b) => b.checked);
         const all = root.querySelector("#cfgLinkCheckAll");
         const delBtn = root.querySelector("#cfgBatchDelLinks");
+        const copyBtn = root.querySelector("#cfgBatchCopyLinks");
+        const cutBtn = root.querySelector("#cfgBatchCutLinks");
+        const pasteBtn = root.querySelector("#cfgBatchPaste");
+        const chip = root.querySelector("#cfgClipChip");
+        const clearBtn = root.querySelector("#cfgClipClear");
         const hint = root.querySelector("#cfgBatchHint");
         if (all) {
           all.checked = boxes.length > 0 && checked.length === boxes.length;
           all.indeterminate = checked.length > 0 && checked.length < boxes.length;
         }
-        if (delBtn) delBtn.disabled = checked.length === 0;
-        if (hint) hint.textContent = `已选 ${checked.length} 项`;
+        const n = checked.length;
+        if (delBtn) delBtn.disabled = n === 0;
+        if (copyBtn) copyBtn.disabled = n === 0;
+        if (cutBtn) cutBtn.disabled = n === 0;
+        if (hint) hint.textContent = `已选 ${n} 项`;
+        const cn = clipCount();
+        if (pasteBtn) pasteBtn.hidden = cn === 0;
+        if (chip) {
+          chip.hidden = cn === 0;
+          if (cn) chip.textContent = `剪贴板 ${cn} 项（${linkClip.mode === "cut" ? "移动" : "复制"}）`;
+        }
+        if (clearBtn) clearBtn.hidden = cn === 0;
+      };
+
+      /** 把当前选中的卡片索引取出来（升序） */
+      const checkedIndices = () =>
+        [...root.querySelectorAll("[data-l-check]:checked")]
+          .map((b) => +b.dataset.lCheck)
+          .sort((a, b) => a - b);
+
+      /** 复制/剪切选中卡片到剪贴板 */
+      const clipSelected = (mode) => {
+        const indices = checkedIndices();
+        if (!indices.length) return;
+        const links = NavStore.pickLinks(this.selectedCatId, indices, leafChildId());
+        if (!links.length) return;
+        setLinkClip(mode, links);
+        // 剪切后清空勾选，避免误以为还要再删一次
+        root.querySelectorAll("[data-l-check]").forEach((b) => (b.checked = false));
+        syncBatchUi();
+      };
+
+      /**
+       * 把剪贴板内容粘贴到目标分类并刷新。
+       * - copy：目标处新增副本，源保持不变。
+       * - cut ：目标处新增副本后，按「标题+URL」从源叶子移除原项（= 移动）。
+       * 同源同目标时直接拒绝，避免原地增删。
+       */
+      const pasteTo = async (toCatId, toChildId) => {
+        const links = linkClip.links || [];
+        if (!links.length) return;
+        const mode = linkClip.mode === "cut" ? "cut" : "copy";
+        const sameLeaf =
+          toCatId === this.selectedCatId &&
+          String(toChildId || "") === String(leafChildId() || "");
+        if (mode === "cut" && sameLeaf) {
+          alert("源分类与目标分类相同，无需移动。");
+          return;
+        }
+        const added = NavStore.copyLinksToCategory(links, toCatId, toChildId);
+        if (!added) {
+          alert("粘贴失败：目标分类不存在。");
+          return;
+        }
+        if (mode === "cut") {
+          // 副本已追加到目标，现在从源叶子移除原项（按标题+URL 匹配）
+          const keys = new Set(links.map((l) => `${l.title}\u0000${l.url}`));
+          const src = NavStore.resolveLeaf(
+            NavStore.get().categories,
+            this.selectedCatId,
+            leafChildId()
+          );
+          const idxs = [];
+          (src?.links || []).forEach((l, i) => {
+            if (keys.has(`${l.title}\u0000${l.url}`)) idxs.push(i);
+          });
+          if (idxs.length) NavStore.removeLinks(this.selectedCatId, idxs, leafChildId());
+        }
+        clearLinkClip();
+        this.activeTab = "cats";
+        flushAutoBackup();
+        this.render();
       };
 
       root.querySelectorAll("[data-l-check]").forEach((box) => {
@@ -2234,6 +2450,129 @@
         });
         syncBatchUi();
       });
+
+      root.querySelector("#cfgBatchCopyLinks")?.addEventListener("click", () => clipSelected("copy"));
+      root.querySelector("#cfgBatchCutLinks")?.addEventListener("click", () => clipSelected("cut"));
+      root.querySelector("#cfgClipClear")?.addEventListener("click", () => {
+        clearLinkClip();
+        syncBatchUi();
+      });
+
+      root.querySelector("#cfgBatchPaste")?.addEventListener("click", async () => {
+        const n = clipCount();
+        if (!n) return;
+        const target = await openPasteTargetDialog({
+          count: n,
+          mode: linkClip.mode,
+          title: linkClip.mode === "cut" ? "移动到分类" : "复制到分类",
+        });
+        if (!target) return;
+        await pasteTo(target.catId, target.childId);
+      });
+
+      // ---- 右键菜单：复制 / 剪切 / 粘贴到该分类 ----
+      const menu = root.querySelector("#cfgLinkMenu");
+      const hideMenu = () => {
+        if (menu) menu.hidden = true;
+      };
+      const showMenu = (x, y, html, handlers) => {
+        if (!menu) return;
+        menu.innerHTML = html;
+        menu.hidden = false;
+        // 视口边界收敛
+        const r = menu.getBoundingClientRect();
+        const px = Math.min(x, window.innerWidth - r.width - 8);
+        const py = Math.min(y, window.innerHeight - r.height - 8);
+        menu.style.left = `${Math.max(8, px)}px`;
+        menu.style.top = `${Math.max(8, py)}px`;
+        Object.entries(handlers).forEach(([key, fn]) => {
+          menu.querySelector(`[data-menu="${key}"]`)?.addEventListener("click", () => {
+            hideMenu();
+            fn();
+          });
+        });
+      };
+
+      root.addEventListener("click", (e) => {
+        if (menu && !menu.contains(e.target)) hideMenu();
+      });
+
+      root.querySelectorAll(".cfg-item[data-li]").forEach((card) => {
+        card.addEventListener("contextmenu", (e) => {
+          const idx = +card.dataset.li;
+          // 若该卡片已勾选，则整批操作；否则只针对当前卡片
+          const box = card.querySelector("[data-l-check]");
+          const useBatch = !!box?.checked && checkedIndices().length > 1;
+          const indices = useBatch ? checkedIndices() : [idx];
+          const label = useBatch ? `${indices.length} 个网站` : "该网站";
+          e.preventDefault();
+          const cn = clipCount();
+          const items = [
+            `<button type="button" data-menu="copy">复制${useBatch ? `（${indices.length}）` : ""}</button>`,
+            `<button type="button" data-menu="cut">剪切${useBatch ? `（${indices.length}）` : ""}</button>`,
+            cn && !useBatch ? `<button type="button" data-menu="paste">粘贴 ${cn} 项到当前分类</button>` : "",
+            `<span class="cfg-menu-sep"></span>`,
+            `<button type="button" data-menu="edit">编辑</button>`,
+            `<button type="button" data-menu="del" class="danger">删除</button>`,
+          ].join("");
+          showMenu(e.clientX, e.clientY, items, {
+            copy: () => {
+              const links = NavStore.pickLinks(this.selectedCatId, indices, leafChildId());
+              if (!links.length) return;
+              setLinkClip("copy", links);
+              syncBatchUi();
+            },
+            cut: () => {
+              const links = NavStore.pickLinks(this.selectedCatId, indices, leafChildId());
+              if (!links.length) return;
+              setLinkClip("cut", links);
+              syncBatchUi();
+            },
+            paste: () => {
+              // 粘贴到当前正在查看的叶子：把剪贴板源视为来源，直接复用 pasteTo
+              void pasteTo(this.selectedCatId, leafChildId());
+            },
+            edit: () => {
+              root.querySelector(`[data-l-edit="${idx}"]`)?.click();
+            },
+            del: () => {
+              if (!confirm(`确定删除 ${label}？`)) return;
+              this.activeTab = "cats";
+              NavStore.removeLinks(this.selectedCatId, indices, leafChildId());
+              flushAutoBackup();
+            },
+          });
+        });
+      });
+      // 目标分类上右键 → 直接粘贴到该分类
+      root.querySelectorAll(".cfg-cat[data-cat]").forEach((btn) => {
+        btn.addEventListener("contextmenu", (e) => {
+          const cn = clipCount();
+          if (!cn) return; // 没有剪贴板内容时交给浏览器默认菜单
+          e.preventDefault();
+          const catId = btn.dataset.cat;
+          const childId = btn.dataset.child || "";
+          const name = (NavStore.get().categories.find((c) => c.id === catId) || {}).name || "";
+          const childName = childId
+            ? ((NavStore.get().categories.find((c) => c.id === catId) || {}).children || []).find(
+                (ch) => ch.id === childId
+              )?.name || ""
+            : "";
+          const where = childName ? `${name} / ${childName}` : name;
+          showMenu(
+            e.clientX,
+            e.clientY,
+            `<button type="button" data-menu="paste">粘贴 ${cn} 项到「${esc(where)}」</button>`,
+            { paste: () => void pasteTo(catId, childId) }
+          );
+        });
+      });
+
+      document.addEventListener("keydown", function onEsc(e) {
+        if (e.key === "Escape") hideMenu();
+      });
+      root.addEventListener("scroll", hideMenu, true);
+      syncBatchUi();
 
       root.querySelector("#cfgBatchDelLinks")?.addEventListener("click", () => {
         const indices = [...root.querySelectorAll("[data-l-check]:checked")].map((b) => +b.dataset.lCheck);

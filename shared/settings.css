@@ -357,6 +357,94 @@
   user-select: none;
 }
 
+/* 剪贴板状态提示（复制/剪切了多少项） */
+.cfg-clip-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  white-space: nowrap;
+}
+
+.cfg-clip-clear {
+  display: inline-grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cfg-clip-clear:hover {
+  color: #dc2626;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+/* 卡片右键菜单 */
+.cfg-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 168px;
+  padding: 0.25rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 12px 32px rgba(31, 36, 48, 0.16);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cfg-menu[hidden] {
+  display: none !important;
+}
+
+.cfg-menu button {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 0.42rem 0.6rem;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cfg-menu button:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.cfg-menu button.danger {
+  color: #dc2626;
+}
+
+.cfg-menu button.danger:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.cfg-menu-sep {
+  height: 1px;
+  margin: 0.2rem 0.3rem;
+  background: var(--line);
+}
+
 .cfg-item-main { min-width: 0; display: grid; gap: 0.15rem; flex: 1; }
 .cfg-item-main strong { font-size: 13px; }
 .cfg-item-main span {

@@ -817,6 +817,61 @@
       return true;
     },
 
+    /**
+     * 批量把选中的链接移动到另一个分类 / 子分类（追加到末尾）。
+     * indices 可乱序；返回实际移动条数。同一叶子内移动视为无效，返回 0。
+     */
+    moveLinksToCategory(fromCatId, indices, toCatId, fromChildId, toChildId) {
+      if (!fromCatId || !toCatId) return 0;
+      const fromChild = fromChildId || null;
+      const toChild = toChildId || null;
+      const sameLeaf =
+        fromCatId === toCatId && String(fromChild || "") === String(toChild || "");
+      if (sameLeaf) return 0;
+      const from = resolveLeaf(state.categories, fromCatId, fromChild);
+      const to = resolveLeaf(state.categories, toCatId, toChild);
+      if (!from || !to) return 0;
+      const set = new Set(
+        (indices || [])
+          .map((i) => +i)
+          .filter((i) => Number.isInteger(i) && i >= 0 && i < from.links.length)
+      );
+      if (!set.size) return 0;
+      const picked = from.links.filter((_, i) => set.has(i));
+      from.links = from.links.filter((_, i) => !set.has(i));
+      to.links.push(...picked);
+      persist();
+      return picked.length;
+    },
+
+    /**
+     * 把一批链接对象复制（深拷贝、重生成 id）到目标分类 / 子分类。
+     * 用于「复制后粘贴」——源链接保持不变。返回实际复制条数。
+     */
+    copyLinksToCategory(links, toCatId, toChildId) {
+      if (!toCatId || !Array.isArray(links) || !links.length) return 0;
+      const to = resolveLeaf(state.categories, toCatId, toChildId || null);
+      if (!to) return 0;
+      const copies = links.map((l) => {
+        const copy = normalizeLink(clone(l));
+        copy.id = uid("lnk");
+        return copy;
+      });
+      to.links.push(...copies);
+      persist();
+      return copies.length;
+    },
+
+    /** 按索引数组取出链接的深拷贝（用于复制到剪贴板）。 */
+    pickLinks(catId, indices, childId) {
+      const leaf = resolveLeaf(state.categories, catId, childId || null);
+      if (!leaf) return [];
+      return (indices || [])
+        .map((i) => +i)
+        .filter((i) => Number.isInteger(i) && i >= 0 && i < leaf.links.length)
+        .map((i) => clone(leaf.links[i]));
+    },
+
     catLinkCount,
     resolveLeaf,
 
