@@ -750,23 +750,34 @@
         return;
       }
 
+      const isCut = mode === "cut";
+      const modeLabel = isCut ? "移动" : "复制";
+      const pasteIcon = isCut
+        ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a1 1 0 0 1 1-1h4l2 2h8a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M10 12h6"/><polyline points="13.5 9.5 16 12 13.5 14.5"/></svg>`
+        : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>`;
+
       const overlay = document.createElement("div");
       overlay.id = "cfgPasteDialog";
       overlay.className = "cfg-dialog-overlay";
       overlay.innerHTML = `
-        <div class="cfg-dialog" role="dialog" aria-modal="true" aria-labelledby="cfgPasteTitle">
-          <h3 id="cfgPasteTitle">${esc(title)}</h3>
-          <p class="settings-tip" style="margin:0 0 0.6rem">
-            共 ${count} 个网站，将以「${mode === "cut" ? "移动" : "复制"}」方式放到：
-          </p>
-          <label class="cfg-field">
-            <span>一级分类</span>
-            <select id="cfgPasteCat"></select>
-          </label>
-          <label class="cfg-field" id="cfgPasteChildWrap" hidden>
-            <span>子分类</span>
-            <select id="cfgPasteChild"></select>
-          </label>
+        <div class="cfg-dialog cfg-paste-dialog" role="dialog" aria-modal="true" aria-labelledby="cfgPasteTitle">
+          <div class="cfg-paste-head">
+            <span class="cfg-paste-badge" data-mode="${isCut ? "cut" : "copy"}" aria-hidden="true">${pasteIcon}</span>
+            <div class="cfg-paste-heading">
+              <h3 id="cfgPasteTitle">${esc(title)}</h3>
+              <p class="cfg-paste-sub">将 <b>${count}</b> 个网站以「${modeLabel}」方式放到：</p>
+            </div>
+          </div>
+          <div class="cfg-paste-fields">
+            <label class="cfg-field">
+              <span>一级分类</span>
+              <select id="cfgPasteCat"></select>
+            </label>
+            <label class="cfg-field" id="cfgPasteChildWrap" hidden>
+              <span>子分类</span>
+              <select id="cfgPasteChild"></select>
+            </label>
+          </div>
           <p class="cfg-dialog-err" id="cfgPasteErr" hidden></p>
           <div class="cfg-dialog-actions">
             <button type="button" class="cfg-btn" id="cfgPasteCancel">取消</button>
