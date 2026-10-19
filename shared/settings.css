@@ -1,4 +1,4 @@
-﻿.settings-panel {
+.settings-panel {
   position: fixed;
   inset: 0;
   z-index: 50;
@@ -799,6 +799,25 @@ html[data-theme="dark"] .cfg-field select {
 .cfg-status.ok { color: #059669; }
 .cfg-status.err { color: #dc2626; }
 .cfg-status.warn { color: #d97706; }
+
+.cfg-conflicts {
+  margin: 0.3rem 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.cfg-conflicts summary {
+  cursor: pointer;
+  color: #d97706;
+}
+.cfg-conflicts ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+}
+.cfg-conflicts li {
+  margin: 0.15rem 0;
+  word-break: break-all;
+}
 .login-panel {
   position: fixed;
   inset: 0;

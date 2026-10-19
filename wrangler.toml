@@ -7,6 +7,15 @@ pages_build_output_dir = "."
 binding = "CL_NAV_SYNC"
 id = "fbfee28c0c54443fb8d4aabc9b68880b"
 
+# 强一致同步 v2（/api/sync2）需要 D1。
+# 创建后把 database_id 填进去并取消注释（也可以在 Pages 控制台 Settings → Bindings 里添加）：
+#   npx wrangler d1 create cl-nav-sync
+#   npx wrangler d1 execute cl-nav-sync --remote --file=./schema/sync.sql
+# [[d1_databases]]
+# binding = "CL_NAV_DB"
+# database_name = "cl-nav-sync"
+# database_id = "<创建命令返回的 database_id>"
+
 [vars]
 LIBRARY_ADMIN_PASS = "xiaochenbian"
 

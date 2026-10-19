@@ -934,7 +934,7 @@
       .search-row { max-width: none; grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="stylesheet" href="shared/settings.css?v=20261014a" />
+  <link rel="stylesheet" href="shared/settings.css?v=20261019a" />
 </head>
 <body>
   <div class="page">
@@ -988,14 +988,16 @@
   <script src="shared/data.js?v=20261008a"></script>
   <script src="shared/api-base.js?v=20260328s"></script>
   <script src="shared/favicon-cache.js"></script>
-  <script src="shared/store.js?v=20261013c"></script>
+  <script src="shared/store.js?v=20261019a"></script>
   <script src="shared/auth.js"></script>
   <script src="shared/login-ui.js"></script>
-  <script src="shared/cf-sync.js?v=20260930a"></script>
+  <script src="shared/sync-merge.js?v=20261019a"></script>
+  <script src="shared/sync-engine.js?v=20261019a"></script>
+  <script src="shared/cf-sync.js?v=20261019a"></script>
   <script src="shared/webdav.js?v=20260930a"></script>
   <script src="shared/library-data.js?v=20260328s"></script>
   <script src="shared/portal.js?v=20261013b"></script>
-  <script src="shared/config-ui.js?v=20261014a"></script>
+  <script src="shared/config-ui.js?v=20261019a"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
@@ -1417,18 +1419,38 @@
     refreshFromStore();
     Portal.bindSearch();
 
-    // 云端 / WebDAV：切回前台时尝试拉取
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState !== "visible") return;
+    /**
+     * 自动拉取：只拉取并三方合并，不会覆盖本机未同步的改动。
+     * 设置面板打开时不自动拉取，避免打断正在编辑的表单。
+     */
+    let cloudPulling = false;
+    function pullFromCloud() {
+      if (document.visibilityState === "hidden") return;
+      const panel = document.getElementById("settingsPanel");
+      if (panel && !panel.hidden) return;
+      if (cloudPulling) return;
+      cloudPulling = true;
+      const tasks = [];
       if (window.NavCfSync) {
         const c = NavCfSync.loadPrefs();
-        if (c.autoSync && NavCfSync.isReady(c)) NavCfSync.sync("PULL").catch(() => {});
+        if (c.autoSync && NavCfSync.isReady(c)) tasks.push(NavCfSync.sync("PULL"));
       }
       if (window.NavWebDav) {
         const p = NavWebDav.loadPrefs();
-        if (p.autoBackup && NavWebDav.isReady(p)) NavWebDav.sync("PULL").catch(() => {});
+        if (p.autoBackup && NavWebDav.isReady(p)) tasks.push(NavWebDav.sync("PULL"));
       }
+      Promise.allSettled(tasks).finally(() => {
+        cloudPulling = false;
+      });
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") pullFromCloud();
     });
+    window.addEventListener("online", () => pullFromCloud());
+    // 打开页面先拉一次；之后每 45 秒检查云端是否有新版本
+    window.setTimeout(pullFromCloud, 800);
+    window.setInterval(pullFromCloud, 45000);
 
     const fromHash = location.hash.replace("#", "");
     if (fromHash === "settings") {

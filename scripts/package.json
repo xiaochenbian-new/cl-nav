@@ -4,7 +4,7 @@
   "description": "",
   "main": "extract-localstorage-config.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test-sync-merge.js && node test-sync-client.js && node test-sync2-server.js"
   },
   "keywords": [],
   "author": "",

@@ -44,3 +44,22 @@ Dashboard：**Connect to Git** → 本仓库，**Production branch = `production
 ### GitHub Pages（测试）
 
 推送 `main` → `.github/workflows/deploy-pages.yml`。Settings → Pages → Source = **GitHub Actions**。
+
+## 多端同步（强一致）
+
+导航配置使用 **Cloudflare D1 + 版本号 CAS + 三方合并**，不再是整份 JSON 覆盖：
+
+- 每台设备提交时带 `baseRev`，服务端 `UPDATE ... WHERE rev = baseRev` 原子校验；
+- 版本落后返回 `409`，客户端把「上次同步版本 / 云端最新 / 本机当前」三方合并后重试；
+- 双方新增都保留，删除能正确传播，同一字段冲突按设备 ID 确定性裁决；
+- 资源库目录不再进入导航备份，避免旧快照覆盖服务端资源库。
+
+部署需要给 Pages 绑定 D1 数据库（变量名 `CL_NAV_DB`），旧 KV 数据会在首次读取时自动迁移。未绑定时自动回退旧 KV（仍可能互相覆盖）。完整说明见 [docs/multi-device-sync.md](docs/multi-device-sync.md)。
+
+本地合并测试：
+
+```bash
+node scripts/test-sync-merge.js
+node scripts/test-sync-client.js
+node scripts/test-sync2-server.js
+```

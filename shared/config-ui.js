@@ -1133,7 +1133,30 @@
         token: "",
         autoSync: false,
         remoteNewerSkipAt: 0,
+        baseRev: 0,
+        mode: "",
+        lastMessage: "",
+        lastConflicts: [],
+        lastConflictCount: 0,
       };
+      const cfStatusText = (() => {
+        if (cf.lastMessage) return cf.lastMessage;
+        if (cf.mode === "legacy") {
+          return "当前为兼容模式：D1 未绑定，仍是旧版整份覆盖，多机同时编辑可能互相覆盖。";
+        }
+        if (cf.baseRev > 0) return "强一致同步已连接，本机版本 rev " + cf.baseRev + "。";
+        return "填写相同口令并保存后：多台电脑的改动会自动三方合并，不再互相覆盖。";
+      })();
+      const cfStatusKind =
+        cf.mode === "legacy" || cf.remoteNewerSkipAt ? "warn" : cf.baseRev > 0 ? "ok" : "";
+      const cfConflictsHtml =
+        Array.isArray(cf.lastConflicts) && cf.lastConflicts.length
+          ? `<details class="cfg-conflicts"><summary>最近自动解决的冲突（${
+              Number(cf.lastConflictCount) || cf.lastConflicts.length
+            } 处）</summary><ul>${cf.lastConflicts
+              .map((x) => `<li>${esc(x)}</li>`)
+              .join("")}</ul></details>`
+          : "";
 
       root.innerHTML = `
         <div class="cfg-tabs" id="cfgTabs">
@@ -1373,7 +1396,7 @@
         </div>
         <div class="cfg-pane" data-pane="data" ${tab !== "data" ? "hidden" : ""}>
           <div class="cfg-webdav">
-            <h4>Cloudflare 云端同步（推荐）</h4>
+            <h4>Cloudflare 云端同步（强一致）</h4>
             <label class="cfg-field">
               <span>同步口令（各设备相同，至少 8 位）</span>
               <div class="cfg-webdav-row" style="margin:0">
@@ -1386,15 +1409,12 @@
               <button type="button" class="cfg-btn" id="cfSave">保存</button>
               <button type="button" class="cfg-btn" id="cfTest">测试</button>
               <button type="button" class="cfg-btn primary" id="cfSync">立即同步</button>
-              <button type="button" class="cfg-btn" id="cfUpload">上传到云端</button>
+              <button type="button" class="cfg-btn" id="cfUpload">上传本机改动</button>
               <button type="button" class="cfg-btn" id="cfDownload">从云端恢复</button>
             </div>
-            <p class="cfg-status ${cf.remoteNewerSkipAt ? "warn" : ""}" id="cfStatus">${
-              cf.remoteNewerSkipAt
-                ? "云端有更新备份，建议「从云端恢复」或「立即同步」。"
-                : "勾选「自动同步」并保存后：添加/修改网站约 0.4 秒会上传云端；其它设备打开或切回页面时自动拉取。"
-            }</p>
-            <p class="settings-tip">在 Cloudflare Dashboard → Workers &amp; Pages → cl-nav → Settings → Functions → KV namespace bindings，添加绑定，变量名填 <code>CL_NAV_SYNC</code>。GitHub Pages 会自动走 <code>cl-nav.pages.dev</code> 的同步接口，两站填相同口令即可互通。</p>
+            <p class="cfg-status ${cfStatusKind}" id="cfStatus">${esc(cfStatusText)}</p>
+            ${cfConflictsHtml}
+            <p class="settings-tip">需要先绑定 D1 数据库：Cloudflare Dashboard → Workers &amp; Pages → cl-nav → Settings → Bindings → 添加 <strong>D1 database</strong>，变量名填 <code>CL_NAV_DB</code>。首次读取时会把旧 KV 备份自动迁移为 rev 1。未绑定时自动回退旧 KV（整份覆盖，仍可能互相覆盖，不建议长期使用）。GitHub Pages 会走 <code>cl-nav.pages.dev</code> 的接口。</p>
           </div>
           <div class="cfg-section-divider"></div>
           <details class="cfg-webdav-details">
@@ -1446,7 +1466,7 @@
             <button type="button" class="cfg-btn danger" id="cfgReset">恢复默认</button>
           </div>
           <textarea id="cfgJson" class="cfg-json" spellcheck="false" placeholder="导入时粘贴 JSON，或导出后复制保存"></textarea>
-          <p class="settings-tip">配置保存在浏览器 localStorage；云端/WebDAV/导出的都是这份 JSON。</p>
+          <p class="settings-tip">配置保存在浏览器 localStorage；本地 JSON / WebDAV 备份是这份配置。Cloudflare 云端同步不包含资源库目录（资源库由服务端单独维护，避免旧快照覆盖）。</p>
         </div>
         <div class="cfg-pane" data-pane="theme" ${tab !== "theme" ? "hidden" : ""}>
           <div class="settings-row">
@@ -2660,6 +2680,23 @@
         el.className = "cfg-status" + (kind ? " " + kind : "");
       };
 
+      const applyCfResult = (r, fallback) => {
+        const list = r && Array.isArray(r.conflicts) ? r.conflicts : [];
+        const extra = list.length
+          ? "｜自动合并：" +
+            list
+              .slice(0, 4)
+              .map((c) =>
+                window.NavSyncMerge ? window.NavSyncMerge.describeConflict(c) : c.path
+              )
+              .join("；") +
+            (list.length > 4 ? " 等 " + list.length + " 处" : "")
+          : "";
+        const text = ((r && r.message) || fallback || "同步完成") + extra;
+        const kind = r && (r.fallback || r.mode === "legacy") ? "warn" : "ok";
+        setCfStatus(text, kind);
+      };
+
       root.querySelector("#cfGenToken")?.addEventListener("click", () => {
         if (!window.NavCfSync) return;
         const input = root.querySelector("#cfToken");
@@ -2678,7 +2715,7 @@
         setCfStatus("同步配置已保存", "ok");
         if (autoSync && NavCfSync.isReady()) {
           NavCfSync.sync("FULL")
-            .then((r) => setCfStatus(r.message || "同步完成", "ok"))
+            .then((r) => applyCfResult(r, "同步完成"))
             .catch((e) => setCfStatus(e.message || "同步失败", "err"));
         }
       });
@@ -2700,7 +2737,8 @@
         });
         setCfStatus("正在测试…");
         const msg = await NavCfSync.testConnection(NavCfSync.loadPrefs());
-        setCfStatus(msg, /成功/.test(msg) ? "ok" : "err");
+        const kind = /成功/.test(msg) ? "ok" : /未绑定|兼容/.test(msg) ? "warn" : "err";
+        setCfStatus(msg, kind);
       });
 
       root.querySelector("#cfSync")?.addEventListener("click", async () => {
@@ -2713,7 +2751,7 @@
         setCfStatus("正在同步…");
         try {
           const r = await NavCfSync.sync("FULL");
-          setCfStatus(r.message || "同步完成", "ok");
+          applyCfResult(r, "同步完成");
         } catch (e) {
           setCfStatus(e.message || "同步失败", "err");
         }
@@ -2729,7 +2767,7 @@
         setCfStatus("正在上传…");
         try {
           const r = await NavCfSync.backupNow();
-          setCfStatus(r.message || "上传完成", "ok");
+          applyCfResult(r, "上传完成");
         } catch (e) {
           setCfStatus(e.message || "上传失败", "err");
         }
@@ -2745,7 +2783,7 @@
         setCfStatus("正在恢复…");
         try {
           const r = await NavCfSync.restoreNow();
-          setCfStatus(r.message || "恢复完成", "ok");
+          applyCfResult(r, "恢复完成");
         } catch (e) {
           setCfStatus(e.message || "恢复失败", "err");
         }

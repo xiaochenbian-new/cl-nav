@@ -20,6 +20,20 @@
     } catch (_) {}
   }
 
+  /** 把备份/云端带来的删除墓碑并入本地（只增不减） */
+  function mergeTombstones(list) {
+    if (!Array.isArray(list) || !list.length) return;
+    const tomb = loadTombstones();
+    let added = false;
+    list.forEach((key) => {
+      if (typeof key === "string" && key && !tomb.has(key)) {
+        tomb.add(key);
+        added = true;
+      }
+    });
+    if (added) saveTombstones(tomb);
+  }
+
   function rememberRemovedLinks(links) {
     const tomb = loadTombstones();
     let added = false;
@@ -398,6 +412,9 @@
           .sort((a, b) => a.id.localeCompare(b.id)),
       };
     }
+    out.removedSeeds = Array.isArray(cfg && cfg.removedSeeds)
+      ? [...new Set(cfg.removedSeeds.map(String))].sort()
+      : [...loadTombstones()].sort();
     return out;
   }
 
@@ -503,6 +520,8 @@
       return JSON.stringify(
         {
           ...payload,
+          // 删除墓碑随备份同步，避免 A 删除的 seed 链接被 B 的旧副本带回来
+          removedSeeds: [...loadTombstones()].sort(),
           exportedAt: Date.now(),
         },
         null,
@@ -549,6 +568,8 @@
       if (!remote || !Array.isArray(remote.categories)) {
         throw new Error("网盘数据格式有误");
       }
+      // 云端带来的删除墓碑先并入本地，防止已删的 seed 链接在 ensureClApps 时复活
+      mergeTombstones(remote.removedSeeds);
       const next =
         mode === "merge" ? mergeConfigs(state, remote) : normalizeConfig(remote);
       applyState(next, { fromSync: markClean });
@@ -565,6 +586,7 @@
     importJson(text) {
       const parsed = JSON.parse(text);
       // 导入 JSON = 以该文件为准（整份替换）
+      mergeTombstones(parsed && parsed.removedSeeds);
       applyState(parsed);
     },
 
